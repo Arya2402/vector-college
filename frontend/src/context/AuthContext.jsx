@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
-const BASE = 'http://localhost:5000';
+// Safely parse the env variable to get the base domain (stripping any trailing /api or /)
+let BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+if (BASE.endsWith('/api')) BASE = BASE.slice(0, -4);
+if (BASE.endsWith('/')) BASE = BASE.slice(0, -1);
 
 const AuthContext = createContext();
 

@@ -1,7 +1,15 @@
 import axios from 'axios';
 
+let BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Ensure the base URL ends with /api if it doesn't already
+if (process.env.REACT_APP_API_URL && !process.env.REACT_APP_API_URL.endsWith('/api')) {
+  BASE_URL = process.env.REACT_APP_API_URL.endsWith('/')
+    ? `${process.env.REACT_APP_API_URL}api`
+    : `${process.env.REACT_APP_API_URL}/api`;
+}
+
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: BASE_URL,
 });
 
 API.interceptors.request.use((config) => {
@@ -11,7 +19,7 @@ API.interceptors.request.use((config) => {
 });
 
 const AcademicAPI = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: BASE_URL,
 });
 
 AcademicAPI.interceptors.request.use((config) => {
