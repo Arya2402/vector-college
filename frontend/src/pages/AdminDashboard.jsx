@@ -88,12 +88,13 @@ function SectionManager({ title, fetchFn, createFn, updateFn, deleteFn, fields }
   const [data, setData] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { loadData(); }, [loadData]);
   const loadData = async () => {
     try { const res = await fetchFn(true); setData(res.data); }
     catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, []);
   const handleSave = async (formData) => {
     try {
       if (modal?.type === 'edit') { await updateFn(modal.item._id, formData); toast.success('Updated!'); }
@@ -333,12 +334,16 @@ const sections = [
 function EnquiriesManager() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { loadData(); }, []);
+
   const loadData = async () => {
     try { const res = await api.fetchEnquiries(); setData(res.data); }
     catch { toast.error('Failed to load enquiries'); }
     finally { setLoading(false); }
   };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, []);
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this enquiry?')) return;
     try { await api.deleteEnquiry(id); toast.success('Deleted'); loadData(); }

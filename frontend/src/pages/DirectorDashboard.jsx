@@ -146,12 +146,6 @@ function ScoreEntry({ testId, onBack }) {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { loadDetail(); }, [testId, loadDetail]);
-    const loadDetail = async () => {
-        try { const res = await api.fetchTestDetail(testId); setTestDetail(res.data); initForm(res.data); }
-        catch { toast.error('Failed to load'); }
-        finally { setLoading(false); }
-    };
     const initForm = (data) => {
         const mf = {};
         data.students?.forEach(s => {
@@ -163,6 +157,15 @@ function ScoreEntry({ testId, onBack }) {
         });
         setMarksForm(mf);
     };
+
+    const loadDetail = async () => {
+        try { const res = await api.fetchTestDetail(testId); setTestDetail(res.data); initForm(res.data); }
+        catch { toast.error('Failed to load'); }
+        finally { setLoading(false); }
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { loadDetail(); }, [testId]);
     const updateField = (sid, sub, field, val) => {
         setMarksForm(prev => ({ ...prev, [sid]: { ...prev[sid], [sub]: { ...prev[sid][sub], [field]: val } } }));
     };
