@@ -63,11 +63,10 @@ export default function StatsSection({ stats = [] }) {
         <p className="text-sm text-gray-600 max-w-xl mx-auto mb-8">
           Empowering success through quality education and expert mentorship. Join thousands of students achieving their dreams.
         </p>
-        <div className={`grid grid-cols-1 sm:grid-cols-2 ${items.length >= 3 ? 'lg:grid-cols-3' : ''} gap-6`}>
+        <div className={`grid grid - cols - 1 sm: grid - cols - 2 ${items.length >= 3 ? 'lg:grid-cols-3' : ''} gap - 6`}>
           {items.map((item, i) => {
             const Icon = ICON_MAP[item.icon] || ICON_MAP[item.label] || FiAward;
             const color = COLOR_MAP[item.icon] || COLOR_MAP[item.label] || 'text-indigo-500';
-            const target = parseInt(String(item.value).replace(/[^0-9]/g, '')) || 0;
             const suffix = String(item.value).includes('%') ? '%' : '+';
             return (
               <div key={item._id || i} className="bg-[#F4F6FF] rounded-xl p-6 text-center shadow-md">

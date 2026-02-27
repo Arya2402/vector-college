@@ -146,7 +146,7 @@ function ScoreEntry({ testId, onBack }) {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { loadDetail(); }, [testId]);
+    useEffect(() => { loadDetail(); }, [testId, loadDetail]);
     const loadDetail = async () => {
         try { const res = await api.fetchTestDetail(testId); setTestDetail(res.data); initForm(res.data); }
         catch { toast.error('Failed to load'); }
@@ -165,12 +165,6 @@ function ScoreEntry({ testId, onBack }) {
     };
     const updateField = (sid, sub, field, val) => {
         setMarksForm(prev => ({ ...prev, [sid]: { ...prev[sid], [sub]: { ...prev[sid][sub], [field]: val } } }));
-    };
-
-    const calcMarks = (correct, wrong, test) => {
-        const c = Number(correct) || 0;
-        const w = Number(wrong) || 0;
-        return c * (test.positiveMarks || 4) - w * (test.negativeMarks || 1);
     };
 
     const saveMarks = async () => {

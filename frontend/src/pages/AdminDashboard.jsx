@@ -88,7 +88,7 @@ function SectionManager({ title, fetchFn, createFn, updateFn, deleteFn, fields }
   const [data, setData] = useState([]);
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
   const loadData = async () => {
     try { const res = await fetchFn(true); setData(res.data); }
     catch { toast.error('Failed to load'); }
@@ -146,7 +146,7 @@ function SingletonEditor({ title, fetchFn, saveFn, fields }) {
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { fetchFn().then(res => setData(res.data)).catch(() => toast.error('Load failed')).finally(() => setLoading(false)); }, []);
+  useEffect(() => { fetchFn().then(res => setData(res.data)).catch(() => toast.error('Load failed')).finally(() => setLoading(false)); }, [fetchFn]);
   const handleSave = async (e) => {
     e.preventDefault(); setSaving(true);
     try { await saveFn(data); toast.success('Saved!'); }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiTrendingUp, FiArrowLeft } from 'react-icons/fi';
+import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward } from 'react-icons/fi';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests } from '../api';
 
@@ -230,7 +230,7 @@ export default function StudentDashboard() {
     const [active, setActive] = useState('dashboard');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const { logoutAcademic, academicUser } = useAuth();
+    const { logoutAcademic } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => { fetchStudentDashboard().then(r => setData(r.data)).catch(() => toast.error('Failed to load dashboard')).finally(() => setLoading(false)); }, []);
