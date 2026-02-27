@@ -8,9 +8,10 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.FRONTEND_URL || '*'
-    : '*',
+  origin: function (origin, callback) {
+    // Allow all origins
+    return callback(null, true);
+  },
   credentials: true
 }));
 
