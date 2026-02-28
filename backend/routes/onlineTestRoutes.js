@@ -241,7 +241,7 @@ router.post('/attempt/:attemptId/submit', protect, authorize('student'), async (
                 let isCorrect = false;
 
                 if (q.type === 'Numerical') {
-                    if (Number(studentAns.numericalAnswer) === Number(q.correctNumericalAnswer)) {
+                    if (studentAns.numericalAnswer != null && Math.abs(Number(studentAns.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001) {
                         isCorrect = true;
                     }
                     formattedAnswers.push({ questionId: q._id, numericalAnswer: studentAns.numericalAnswer, isCorrect });

@@ -385,41 +385,59 @@ router.get('/tests/:testId', async (req, res) => {
                 }
             });
 
-            // Fill marks from attempt
+            // Fill marks from attempt & RE-CALCULATE total to fix legacy bad data
+            let recalculatedTotal = 0;
             myAttempt.answers.forEach(ans => {
                 const q = test.questions.find(qx => qx._id.toString() === ans.questionId.toString());
                 if (!q) return;
                 const sub = q.subject || 'General';
 
-                // Robust verification of correctness (backup for old data)
-                let answerIsCorrect = ans.isCorrect;
-                if (answerIsCorrect === undefined || answerIsCorrect === null) {
-                    if (q.type === 'Numerical' && ans.numericalAnswer != null) {
-                        answerIsCorrect = Math.abs(Number(ans.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001;
-                    } else if (ans.selectedOptionIndex != null) {
-                        answerIsCorrect = parseInt(ans.selectedOptionIndex) === q.correctOptionIndex;
-                    } else {
-                        answerIsCorrect = false;
-                    }
+                // FORCE Re-verification of correctness (ignore stored value to fix legacy bugs)
+                let answerIsCorrect = false;
+                if (q.type === 'Numerical' && ans.numericalAnswer != null) {
+                    answerIsCorrect = Math.abs(Number(ans.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001;
+                } else if (ans.selectedOptionIndex != null) {
+                    answerIsCorrect = parseInt(ans.selectedOptionIndex) === q.correctOptionIndex;
                 }
 
                 if (answerIsCorrect) {
                     subjectsMap[sub].correctAnswers++;
-                    subjectsMap[sub].marksObtained += (q.positiveMarks || 4);
+                    const plus = (q.positiveMarks || 4);
+                    subjectsMap[sub].marksObtained += plus;
+                    recalculatedTotal += plus;
                 } else if (ans.selectedOptionIndex != null || ans.numericalAnswer != null) {
                     subjectsMap[sub].wrongAnswers++;
-                    subjectsMap[sub].marksObtained -= (q.negativeMarks || 1);
+                    const minus = (q.negativeMarks || 1);
+                    subjectsMap[sub].marksObtained -= minus;
+                    recalculatedTotal -= minus;
                 } else {
                     subjectsMap[sub].unattempted++;
                 }
             });
 
-            // Get rankings for CBT
+            // Get rankings for CBT (also re-calculate scores for everyone to be fair in rankings)
             const allAttempts = await TestAttempt.find({ onlineTestId: test._id, status: { $in: ['submitted', 'auto-submitted-violation'] } });
             const studentBestScore = {};
+
             allAttempts.forEach(a => {
-                if (!studentBestScore[a.studentId] || a.score.totalMarks > studentBestScore[a.studentId]) {
-                    studentBestScore[a.studentId] = a.score.totalMarks;
+                // Determine best score for each student using RE-CALCULATED points
+                let aScore = 0;
+                a.answers.forEach(ans => {
+                    const q = test.questions.find(qx => qx._id.toString() === ans.questionId.toString());
+                    if (!q) return;
+                    let isCorrect = false;
+                    if (q.type === 'Numerical' && ans.numericalAnswer != null) {
+                        isCorrect = Math.abs(Number(ans.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001;
+                    } else if (ans.selectedOptionIndex != null) {
+                        isCorrect = parseInt(ans.selectedOptionIndex) === q.correctOptionIndex;
+                    }
+
+                    if (isCorrect) aScore += (q.positiveMarks || 4);
+                    else if (ans.selectedOptionIndex != null || ans.numericalAnswer != null) aScore -= (q.negativeMarks || 1);
+                });
+
+                if (!studentBestScore[a.studentId] || aScore > studentBestScore[a.studentId]) {
+                    studentBestScore[a.studentId] = aScore;
                 }
             });
 
@@ -454,16 +472,16 @@ router.get('/tests/:testId', async (req, res) => {
                     type: 'cbt',
                     positiveMarks: test.questions[0]?.positiveMarks || 4,
                     negativeMarks: test.questions[0]?.negativeMarks || 1,
-                    questions: test.questions, // Include questions for review
+                    questions: test.questions,
                 },
                 subjects: Object.values(subjectsMap),
-                myTotal: myAttempt.score.totalMarks,
+                myTotal: recalculatedTotal,
                 myMax: maxPossible,
-                myPercentage: maxPossible > 0 ? Math.round((myAttempt.score.totalMarks / maxPossible) * 1000) / 10 : 0,
+                myPercentage: maxPossible > 0 ? Math.round((recalculatedTotal / maxPossible) * 1000) / 10 : 0,
                 myRank,
                 totalStudents: rankings.length,
                 rankings,
-                answers: myAttempt.answers, // Include student answers for review
+                answers: myAttempt.answers,
                 attemptId: myAttempt._id
             });
         }
