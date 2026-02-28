@@ -110,5 +110,6 @@ export const fetchStudentDashboard = () => AcademicAPI.get('/student/dashboard')
 export const fetchStudentMarks = () => AcademicAPI.get('/student/marks');
 export const fetchStudentAttendance = () => AcademicAPI.get('/student/attendance');
 export const fetchStudentTests = () => AcademicAPI.get('/student/tests');
+export const fetchStudentTestDetail = (testId) => AcademicAPI.get(`/student/tests/${testId}`);
 
 export default API;

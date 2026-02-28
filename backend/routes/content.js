@@ -4,29 +4,6 @@ const { protect } = require('../middleware/authMiddleware');
 const { Hero, Notice, Course, Faculty, Gallery, Testimonial, Stats, CollegeInfo, Enquiry } = require('../models/Content');
 
 // ==================== HELPER ====================
-const makeRoutes = (Model, routeName) => {
-  // GET all (public)
-  router.get(`/${routeName}`, async (req, res) => {
-    try {
-      const items = await Model.find({ isActive: { $ne: false } }).sort({ order: 1, createdAt: -1 });
-      res.json(items);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  // GET all including inactive (admin only)
-  router.get(`/${routeName}/all`, protect, async (req, res) => {
-    try {
-      const items = await Model.find().sort({ order: 1, createdAt: -1 });
-      res.json(items);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  // POST create (public for enquiries, protect for others typically but we will override below if needed or just use this)
-};
 
 // Custom POST create for public enquiries
 router.post('/enquiries', async (req, res) => {

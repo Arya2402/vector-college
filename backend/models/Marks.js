@@ -10,6 +10,13 @@ const marksSchema = new mongoose.Schema({
     correctAnswers: { type: Number, default: 0 },
     wrongAnswers: { type: Number, default: 0 },
     unattempted: { type: Number, default: 0 },
+    // Per-topic breakdown
+    topicBreakdown: [{
+        topic: { type: String, required: true },
+        correct: { type: Number, default: 0 },
+        wrong: { type: Number, default: 0 },
+        unattempted: { type: Number, default: 0 },
+    }],
 }, { timestamps: true });
 
 // One entry per student per subject per test

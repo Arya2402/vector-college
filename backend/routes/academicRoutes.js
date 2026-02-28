@@ -18,13 +18,17 @@ router.post('/students', async (req, res) => {
         if (!userId || !password || !name || !batch || !course) {
             return res.status(400).json({ message: 'All fields are required' });
         }
-        const existing = await User.findOne({ userId: parseInt(userId) });
+        const id = parseInt(userId);
+        if (id < 1000 || id > 999999) {
+            return res.status(400).json({ message: 'Student ID must be between 1000 and 999999' });
+        }
+        const existing = await User.findOne({ userId: id });
         if (existing) return res.status(400).json({ message: 'User ID already exists' });
 
-        await User.create({ userId: parseInt(userId), password, role: 'student' });
-        await StudentProfile.create({ studentId: parseInt(userId), name, batch, course });
+        await User.create({ userId: id, password, role: 'student' });
+        await StudentProfile.create({ studentId: id, name, batch, course });
 
-        res.status(201).json({ message: 'Student created', userId: parseInt(userId), name, batch, course });
+        res.status(201).json({ message: 'Student created', userId: id, name, batch, course });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -286,22 +290,31 @@ router.post('/tests/:testId/marks', async (req, res) => {
 // POST /api/academic/tests/:testId/marks/bulk — Bulk enter marks
 router.post('/tests/:testId/marks/bulk', async (req, res) => {
     try {
-        const { entries } = req.body; // [{studentId, subject, marksObtained}]
+        const { entries } = req.body; // [{studentId, subject, marksObtained, correctAnswers, wrongAnswers, unattempted, topicBreakdown}]
         const test = await Test.findById(req.params.testId);
         if (!test) return res.status(404).json({ message: 'Test not found' });
 
         const ops = entries.map(e => {
             const subDef = test.subjects.find(s => s.name === e.subject);
+            const update = {
+                marksObtained: Number(e.marksObtained),
+                totalMarks: subDef?.totalMarks || 100,
+                correctAnswers: Number(e.correctAnswers) || 0,
+                wrongAnswers: Number(e.wrongAnswers) || 0,
+                unattempted: Number(e.unattempted) || 0,
+            };
+            if (e.topicBreakdown && Array.isArray(e.topicBreakdown)) {
+                update.topicBreakdown = e.topicBreakdown.map(t => ({
+                    topic: t.topic,
+                    correct: Number(t.correct) || 0,
+                    wrong: Number(t.wrong) || 0,
+                    unattempted: Number(t.unattempted) || 0,
+                }));
+            }
             return {
                 updateOne: {
                     filter: { testId: test._id, studentId: parseInt(e.studentId), subject: e.subject },
-                    update: {
-                        marksObtained: Number(e.marksObtained),
-                        totalMarks: subDef?.totalMarks || 100,
-                        correctAnswers: Number(e.correctAnswers) || 0,
-                        wrongAnswers: Number(e.wrongAnswers) || 0,
-                        unattempted: Number(e.unattempted) || 0,
-                    },
+                    update,
                     upsert: true,
                 }
             };

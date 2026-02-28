@@ -187,6 +187,90 @@ router.get('/attendance', async (req, res) => {
     }
 });
 
+// GET /api/student/tests/:testId — Detailed test result with topic breakdown + rankings
+router.get('/tests/:testId', async (req, res) => {
+    try {
+        const studentId = req.user.userId;
+        const test = await Test.findById(req.params.testId);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+
+        // Get this student's marks for this test
+        const myMarks = await Marks.find({ testId: test._id, studentId });
+
+        // Build subject breakdown with topic details
+        const subjects = test.subjects.map(sub => {
+            const mark = myMarks.find(m => m.subject === sub.name);
+            return {
+                name: sub.name,
+                totalMarks: sub.totalMarks,
+                topics: sub.topics || [],
+                totalQuestions: sub.totalQuestions || 0,
+                marksObtained: mark?.marksObtained ?? null,
+                correctAnswers: mark?.correctAnswers ?? 0,
+                wrongAnswers: mark?.wrongAnswers ?? 0,
+                unattempted: mark?.unattempted ?? 0,
+                topicBreakdown: mark?.topicBreakdown || [],
+            };
+        });
+
+        // My total
+        const myTotal = myMarks.reduce((s, m) => s + m.marksObtained, 0);
+        const myMax = myMarks.reduce((s, m) => s + m.totalMarks, 0);
+
+        // Get ALL marks for this test to compute rankings
+        const allMarks = await Marks.find({ testId: test._id });
+        const studentTotals = {};
+        allMarks.forEach(m => {
+            if (!studentTotals[m.studentId]) studentTotals[m.studentId] = { total: 0, max: 0 };
+            studentTotals[m.studentId].total += m.marksObtained;
+            studentTotals[m.studentId].max += m.totalMarks;
+        });
+
+        // Sort by total descending
+        const sorted = Object.entries(studentTotals)
+            .map(([id, data]) => ({ studentId: parseInt(id), total: data.total, max: data.max }))
+            .sort((a, b) => b.total - a.total);
+
+        // Attach names and assign ranks
+        const profiles = await StudentProfile.find({ studentId: { $in: sorted.map(s => s.studentId) } });
+        const profileMap = {};
+        profiles.forEach(p => { profileMap[p.studentId] = p.name; });
+
+        const rankings = sorted.map((s, i) => ({
+            rank: i + 1,
+            studentId: s.studentId,
+            name: profileMap[s.studentId] || 'Unknown',
+            totalMarks: s.total,
+            maxMarks: s.max,
+            percentage: s.max > 0 ? Math.round((s.total / s.max) * 1000) / 10 : 0,
+            isMe: s.studentId === studentId,
+        }));
+
+        const myRank = rankings.find(r => r.isMe)?.rank || null;
+
+        res.json({
+            test: {
+                _id: test._id,
+                testName: test.testName,
+                date: test.date,
+                category: test.category,
+                batch: test.batch,
+                positiveMarks: test.positiveMarks,
+                negativeMarks: test.negativeMarks,
+            },
+            subjects,
+            myTotal,
+            myMax,
+            myPercentage: myMax > 0 ? Math.round((myTotal / myMax) * 1000) / 10 : 0,
+            myRank,
+            totalStudents: rankings.length,
+            rankings,
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // GET /api/student/tests — Upcoming published tests
 router.get('/tests', async (req, res) => {
     try {
@@ -204,3 +288,4 @@ router.get('/tests', async (req, res) => {
 });
 
 module.exports = router;
+

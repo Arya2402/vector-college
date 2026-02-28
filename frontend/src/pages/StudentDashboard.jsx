@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward } from 'react-icons/fi';
+import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiArrowLeft, FiChevronRight } from 'react-icons/fi';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests } from '../api';
+import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests, fetchStudentTestDetail } from '../api';
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
     return (
@@ -78,10 +78,208 @@ function DashboardView({ data }) {
     );
 }
 
+// ==================== TEST DETAIL VIEW ====================
+function TestDetailView({ testId, onBack }) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [expandedSubject, setExpandedSubject] = useState(null);
+
+    useEffect(() => {
+        fetchStudentTestDetail(testId)
+            .then(r => setData(r.data))
+            .catch(() => toast.error('Failed to load test details'))
+            .finally(() => setLoading(false));
+    }, [testId]);
+
+    if (loading) return <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-[#27548A] border-t-transparent rounded-full animate-spin" /></div>;
+    if (!data) return <div className="text-center py-10 text-gray-400">Could not load test details.</div>;
+
+    const { test, subjects, myTotal, myMax, myPercentage, myRank, totalStudents, rankings } = data;
+
+    return (
+        <div>
+            {/* Header with back button */}
+            <button onClick={onBack} className="flex items-center gap-2 text-[#27548A] font-medium text-sm mb-4 hover:underline">
+                <FiArrowLeft size={16} /> Back to Results
+            </button>
+
+            {/* Test Overview Card */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
+                <div className="flex items-start justify-between mb-3">
+                    <div>
+                        <h2 className="font-display font-bold text-lg text-gray-900">{test.testName}</h2>
+                        <p className="text-gray-400 text-xs mt-1">
+                            {new Date(test.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                            {test.category && <span className="ml-2 px-2 py-0.5 bg-blue-50 text-[#27548A] rounded-full text-[10px] font-semibold">{test.category}</span>}
+                        </p>
+                    </div>
+                    <div className="text-right">
+                        <div className={`text-2xl font-bold ${myPercentage >= 70 ? 'text-green-600' : myPercentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{myPercentage}%</div>
+                        <div className="text-gray-400 text-xs">{myTotal}/{myMax} marks</div>
+                    </div>
+                </div>
+                <div className="flex gap-3 mt-3">
+                    <div className="flex-1 bg-blue-50 rounded-xl p-3 text-center">
+                        <div className="text-lg font-bold text-[#27548A]">#{myRank || '-'}</div>
+                        <div className="text-gray-400 text-[10px]">Rank of {totalStudents}</div>
+                    </div>
+                    <div className="flex-1 bg-green-50 rounded-xl p-3 text-center">
+                        <div className="text-lg font-bold text-green-600">+{test.positiveMarks}</div>
+                        <div className="text-gray-400 text-[10px]">Per Correct</div>
+                    </div>
+                    <div className="flex-1 bg-red-50 rounded-xl p-3 text-center">
+                        <div className="text-lg font-bold text-red-500">-{test.negativeMarks}</div>
+                        <div className="text-gray-400 text-[10px]">Per Wrong</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Subject-wise Breakdown */}
+            <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">Subject-wise Breakdown</h3>
+            <div className="space-y-3 mb-6">
+                {subjects.map(sub => {
+                    const totalAttempted = sub.correctAnswers + sub.wrongAnswers;
+                    const accuracy = totalAttempted > 0 ? Math.round((sub.correctAnswers / totalAttempted) * 1000) / 10 : 0;
+                    const isExpanded = expandedSubject === sub.name;
+
+                    return (
+                        <div key={sub.name} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                            <button
+                                onClick={() => setExpandedSubject(isExpanded ? null : sub.name)}
+                                className="w-full p-4 text-left"
+                            >
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-display font-semibold text-gray-800">{sub.name}</span>
+                                        <FiChevronRight size={14} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                    </div>
+                                    <span className={`text-lg font-bold ${sub.marksObtained !== null && (sub.marksObtained / sub.totalMarks * 100) >= 70 ? 'text-green-600' : (sub.marksObtained / sub.totalMarks * 100) >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                                        {sub.marksObtained !== null ? sub.marksObtained : '-'}/{sub.totalMarks}
+                                    </span>
+                                </div>
+                                {sub.marksObtained !== null && (
+                                    <div className="flex gap-3 text-xs">
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span> Correct: <b className="text-green-700">{sub.correctAnswers}</b></span>
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Wrong: <b className="text-red-600">{sub.wrongAnswers}</b></span>
+                                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block"></span> Unattempted: <b className="text-gray-600">{sub.unattempted}</b></span>
+                                        <span className="text-gray-400 ml-auto">Accuracy: <b className="text-[#27548A]">{accuracy}%</b></span>
+                                    </div>
+                                )}
+                            </button>
+
+                            {/* Topic Breakdown (Expanded) */}
+                            {isExpanded && (
+                                <div className="border-t border-gray-50 px-4 pb-4 pt-3 bg-gray-50/50">
+                                    {sub.topicBreakdown && sub.topicBreakdown.length > 0 ? (
+                                        <div>
+                                            <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Topic-wise Analysis</h5>
+                                            <div className="space-y-2">
+                                                {sub.topicBreakdown.map((t, i) => {
+                                                    const tTotal = t.correct + t.wrong + t.unattempted;
+                                                    const tAcc = (t.correct + t.wrong) > 0 ? Math.round((t.correct / (t.correct + t.wrong)) * 100) : 0;
+                                                    return (
+                                                        <div key={i} className="bg-white rounded-xl p-3 border border-gray-100">
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <span className="font-medium text-sm text-gray-800">{t.topic}</span>
+                                                                <span className="text-xs text-gray-400">{tTotal} Q · {tAcc}% acc</span>
+                                                            </div>
+                                                            <div className="flex gap-4 text-xs">
+                                                                <span className="text-green-600 font-medium">✓ {t.correct}</span>
+                                                                <span className="text-red-500 font-medium">✗ {t.wrong}</span>
+                                                                <span className="text-gray-400 font-medium">○ {t.unattempted}</span>
+                                                            </div>
+                                                            {/* Progress bar */}
+                                                            {tTotal > 0 && (
+                                                                <div className="flex rounded-full h-1.5 overflow-hidden mt-2 bg-gray-100">
+                                                                    <div className="bg-green-500" style={{ width: `${(t.correct / tTotal) * 100}%` }}></div>
+                                                                    <div className="bg-red-400" style={{ width: `${(t.wrong / tTotal) * 100}%` }}></div>
+                                                                    <div className="bg-gray-300" style={{ width: `${(t.unattempted / tTotal) * 100}%` }}></div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            {sub.topics && sub.topics.length > 0 ? (
+                                                <div>
+                                                    <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Topics Covered</h5>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {sub.topics.map((t, i) => (
+                                                            <span key={i} className="text-xs bg-white border border-gray-200 text-gray-600 px-2.5 py-1 rounded-full">{t}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-gray-400 italic">No topic breakdown available for this subject.</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Rankings Table */}
+            <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">🏆 Test Rankings</h3>
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="text-left py-3 px-4 font-semibold text-gray-500 text-xs">#</th>
+                                <th className="text-left py-3 px-4 font-semibold text-gray-500 text-xs">Student</th>
+                                <th className="text-right py-3 px-4 font-semibold text-gray-500 text-xs">Marks</th>
+                                <th className="text-right py-3 px-4 font-semibold text-gray-500 text-xs">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rankings.map(r => (
+                                <tr key={r.studentId} className={`border-b border-gray-50 transition-colors ${r.isMe ? 'bg-blue-50/70 font-semibold' : 'hover:bg-gray-50/50'}`}>
+                                    <td className="py-2.5 px-4">
+                                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${r.rank === 1 ? 'bg-[#F7D774] text-amber-800' :
+                                                r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                                                    r.rank === 3 ? 'bg-orange-200 text-orange-800' :
+                                                        'bg-gray-50 text-gray-500'
+                                            }`}>{r.rank}</span>
+                                    </td>
+                                    <td className="py-2.5 px-4">
+                                        <span className={`${r.isMe ? 'text-[#27548A]' : 'text-gray-700'}`}>
+                                            {r.name}
+                                            {r.isMe && <span className="ml-1.5 text-[10px] bg-[#27548A] text-white px-1.5 py-0.5 rounded-full">You</span>}
+                                        </span>
+                                    </td>
+                                    <td className="py-2.5 px-4 text-right text-gray-700">{r.totalMarks}/{r.maxMarks}</td>
+                                    <td className="py-2.5 px-4 text-right">
+                                        <span className={`font-bold ${r.percentage >= 70 ? 'text-green-600' : r.percentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                                            {r.percentage}%
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function MarksView() {
     const [marks, setMarks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedTestId, setSelectedTestId] = useState(null);
+
     useEffect(() => { fetchStudentMarks().then(r => setMarks(r.data)).catch(() => toast.error('Failed')).finally(() => setLoading(false)); }, []);
+
+    if (selectedTestId) {
+        return <TestDetailView testId={selectedTestId} onBack={() => setSelectedTestId(null)} />;
+    }
+
     if (loading) return <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-[#27548A] border-t-transparent rounded-full animate-spin" /></div>;
     if (!marks.length) return <div className="text-center py-10 text-gray-400 font-sans">No test results published yet.</div>;
     const testBar = marks.slice().reverse().slice(-10).map(t => ({
@@ -109,26 +307,32 @@ function MarksView() {
             <h2 className="font-display font-semibold text-gray-800 text-lg mb-4">Test History</h2>
             <div className="space-y-4">
                 {marks.map(t => (
-                    <div key={t.testId} className="bg-white rounded-2xl border border border-gray-100 p-5 hover:shadow-soft transition-all">
+                    <button
+                        key={t.testId}
+                        onClick={() => setSelectedTestId(t.testId)}
+                        className="w-full text-left bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:border-[#27548A]/30 transition-all group cursor-pointer"
+                    >
                         <div className="flex items-center justify-between mb-3 border-b border-gray-50 pb-3">
                             <div>
-                                <div className="text-gray-800 font-display font-semibold">{t.testName}</div>
+                                <div className="text-gray-800 font-display font-semibold group-hover:text-[#27548A] transition-colors">{t.testName}</div>
                                 <div className="text-gray-400 text-[10px] mt-0.5">{new Date(t.date).toLocaleDateString('en-IN')}</div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                                <span className={`text-xl font-bold ${t.percentage >= 70 ? 'text-green-600' : t.percentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{t.percentage}%</span>
-                                {t.overallAccuracy !== undefined && <span className="text-[10px] text-gray-400 font-medium tracking-wide">Acc: {t.overallAccuracy}%</span>}
+                            <div className="flex items-center gap-2">
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className={`text-xl font-bold ${t.percentage >= 70 ? 'text-green-600' : t.percentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{t.percentage}%</span>
+                                    {t.rank && <span className="text-[10px] text-gray-400 font-medium">Rank #{t.rank} of {t.totalStudents}</span>}
+                                </div>
+                                <FiChevronRight size={16} className="text-gray-300 group-hover:text-[#27548A] transition-colors" />
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {t.subjects?.map(s => (
                                 <span key={s.subject} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-gray-600 font-medium shadow-sm">
                                     {s.subject}: <span className="font-bold text-gray-800">{s.marksObtained}</span>/{s.totalMarks}
-                                    {s.accuracy !== undefined && <span className="ml-1 text-[10px] text-gray-400">({s.accuracy}%)</span>}
                                 </span>
                             ))}
                         </div>
-                    </div>
+                    </button>
                 ))}
             </div>
         </div>
