@@ -1,25 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as api from '../../api';
 import toast from 'react-hot-toast';
-import { FiClock, FiAlertTriangle, FiCheck } from 'react-icons/fi';
+import { FiClock, FiAlertTriangle, FiCheck, FiChevronRight, FiFlag } from 'react-icons/fi';
 import 'katex/dist/katex.min.css';
 import { MathRenderer } from './MathRenderer';
 
 export default function TestRunner({ testId, attemptData, onFinish }) {
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [answers, setAnswers] = useState([]); // [{ questionId, selectedOptionIndex }]
+
+    // state: { [questionId]: { selectedOptionIndex, numericalAnswer, status: 'visited'|'answered'|'reviewed' } }
+    const [answers, setAnswers] = useState({});
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState(0);
     const [submitting, setSubmitting] = useState(false);
     const [fullscreenWarnings, setFullscreenWarnings] = useState(attemptData?.fullscreenExits || 0);
     const [isViolation, setIsViolation] = useState(false);
 
-    // Load test details for student
+    // Initialize Unvisited statuses
     useEffect(() => {
         api.fetchOnlineTestDetail(testId).then(res => {
             setTest(res.data);
 
-            // Calculate time left
             const startStr = attemptData.startTime;
             const startTime = new Date(startStr).getTime();
             const durationMs = res.data.durationMinutes * 60 * 1000;
@@ -27,11 +29,28 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
             setTimeLeft(remaining);
             setLoading(false);
+
+            // Mark first question as visited
+            if (res.data.questions?.length > 0) {
+                const qId = res.data.questions[0]._id;
+                setAnswers(prev => ({
+                    ...prev,
+                    [qId]: { ...prev[qId], status: 'visited' }
+                }));
+            }
         }).catch(() => {
             toast.error('Failed to load test contents');
             onFinish();
         });
     }, [testId, attemptData.startTime, onFinish]);
+
+    const formatSubmitAnswers = useCallback(() => {
+        return Object.entries(answers).map(([questionId, data]) => ({
+            questionId,
+            selectedOptionIndex: data.selectedOptionIndex,
+            numericalAnswer: data.numericalAnswer
+        }));
+    }, [answers]);
 
     const handleSubmit = useCallback(async (isTimeUp = false, isViolationSubmit = false) => {
         if (!isTimeUp && !isViolationSubmit && !window.confirm('Are you sure you want to finally submit your test?')) return;
@@ -40,7 +59,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
         try {
             await api.submitTestAttempt(attemptData._id, {
-                answers,
+                answers: formatSubmitAnswers(),
                 fullscreenExits: fullscreenWarnings,
                 autoSubmitReason: isViolationSubmit ? 'fullscreen_violation' : (isTimeUp ? 'time_up' : null)
             });
@@ -50,17 +69,16 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             toast.error('Failed to submit test. Try again or contact admin.', { id: toastId });
             setSubmitting(false);
         }
-    }, [attemptData._id, answers, fullscreenWarnings, onFinish]);
+    }, [attemptData._id, formatSubmitAnswers, fullscreenWarnings, onFinish]);
 
     // Timer logic
     useEffect(() => {
         if (loading || timeLeft <= 0 || submitting || isViolation) return;
-
         const timer = setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(timer);
-                    handleSubmit(true); // auto submit
+                    handleSubmit(true);
                     return 0;
                 }
                 return prev - 1;
@@ -69,87 +87,106 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         return () => clearInterval(timer);
     }, [loading, timeLeft, submitting, isViolation, handleSubmit]);
 
-    // Fullscreen enforcement and cheat prevention
+    // Fullscreen enforcement
     const handleFullscreenExit = useCallback(async () => {
         if (submitting || isViolation) return;
-
         const newWarnings = fullscreenWarnings + 1;
         setFullscreenWarnings(newWarnings);
-
-        try {
-            await api.pingTestAttempt(attemptData._id, { fullscreenExits: newWarnings });
-        } catch (err) {
-            console.error('Failed to ping warnings');
-        }
-
+        try { await api.pingTestAttempt(attemptData._id, { fullscreenExits: newWarnings }); } catch (err) { }
         if (newWarnings >= 5) {
             setIsViolation(true);
             toast.error('Test automatically submitted due to multiple fullscreen exits.');
-            handleSubmit(false, true); // violation auto submit
+            handleSubmit(false, true);
         } else {
             toast.error(`WARNING: You exited fullscreen. Warning ${newWarnings}/5. At 5, your test will be auto-submitted.`);
-            // Prompt back to fullscreen
-            setTimeout(() => {
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(() => { });
-                }
-            }, 3000);
+            setTimeout(() => { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => { }); }, 3000);
         }
     }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
 
     useEffect(() => {
-        const checkFullscreen = () => {
-            if (!document.fullscreenElement && !submitting && !isViolation) {
-                handleFullscreenExit();
-            }
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.hidden && !submitting && !isViolation) {
-                handleFullscreenExit();
-            }
-        };
-
+        const checkFullscreen = () => { if (!document.fullscreenElement && !submitting && !isViolation) handleFullscreenExit(); };
+        const handleVisibilityChange = () => { if (document.hidden && !submitting && !isViolation) handleFullscreenExit(); };
         document.addEventListener('fullscreenchange', checkFullscreen);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        // Initial force fullscreen
-        document.documentElement.requestFullscreen().catch(() => {
-            toast.error('Please put your browser in fullscreen to take the test.');
-        });
-
+        document.documentElement.requestFullscreen().catch(() => { toast.error('Please put your browser in fullscreen.'); });
         return () => {
             document.removeEventListener('fullscreenchange', checkFullscreen);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => { });
-            }
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
         };
     }, [handleFullscreenExit, submitting, isViolation]);
 
+
     const handleSelectOption = (questionId, optionIndex) => {
+        setAnswers(prev => ({
+            ...prev,
+            [questionId]: { ...prev[questionId], selectedOptionIndex: optionIndex }
+        }));
+    };
+
+    const handleInputNumerical = (questionId, value) => {
+        setAnswers(prev => ({
+            ...prev,
+            [questionId]: { ...prev[questionId], numericalAnswer: value }
+        }));
+    };
+
+    const isQuestionAnswered = (qId) => {
+        const ans = answers[qId];
+        return ans && (ans.selectedOptionIndex !== undefined || (ans.numericalAnswer !== undefined && ans.numericalAnswer !== ''));
+    };
+
+    const updateStatusAndNavigate = (newStatus) => {
+        const qId = test.questions[currentIndex]._id;
+
+        let finalStatus = newStatus;
+        if (newStatus === 'save') {
+            finalStatus = isQuestionAnswered(qId) ? 'answered' : 'visited';
+        }
+
+        setAnswers(prev => ({
+            ...prev,
+            [qId]: { ...prev[qId], status: finalStatus }
+        }));
+
+        if (currentIndex < test.questions.length - 1) {
+            navigateQuestion(currentIndex + 1);
+        }
+    };
+
+    const navigateQuestion = (idx) => {
+        if (idx < 0 || idx >= test.questions.length) return;
+
+        // Mark current as visited if it has no status
+        const currentQId = test.questions[currentIndex]._id;
+        if (!answers[currentQId]?.status) {
+            setAnswers(prev => ({
+                ...prev,
+                [currentQId]: { ...prev[currentQId], status: 'visited' }
+            }));
+        }
+
+        const nextQId = test.questions[idx]._id;
+        setAnswers(prev => ({
+            ...prev,
+            [nextQId]: { ...prev[nextQId], status: prev[nextQId]?.status || 'visited' }
+        }));
+
+        setCurrentIndex(idx);
+    };
+
+    const handleClearResponse = () => {
+        const qId = test.questions[currentIndex]._id;
         setAnswers(prev => {
-            const existingIdx = prev.findIndex(a => a.questionId === questionId);
-            if (existingIdx !== -1) {
-                const newAnswers = [...prev];
-                newAnswers[existingIdx].selectedOptionIndex = optionIndex;
-                return newAnswers;
-            } else {
-                return [...prev, { questionId, selectedOptionIndex: optionIndex }];
+            const copy = { ...prev };
+            if (copy[qId]) {
+                delete copy[qId].selectedOptionIndex;
+                delete copy[qId].numericalAnswer;
+                copy[qId].status = 'visited';
             }
+            return copy;
         });
     };
-
-    const handleClearOption = (questionId) => {
-        setAnswers(prev => prev.filter(a => a.questionId !== questionId));
-    };
-
-    const getSelectedOption = (questionId) => {
-        const a = answers.find(x => x.questionId === questionId);
-        return a ? a.selectedOptionIndex : null;
-    };
-
-
 
     const formatTime = (secs) => {
         const h = Math.floor(secs / 3600);
@@ -161,24 +198,38 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     if (loading) return <div className="fixed inset-0 bg-white z-50 flex items-center justify-center"><div className="w-10 h-10 border-4 border-[#27548A] border-t-transparent animate-spin rounded-full"></div></div>;
 
-    const attemptedCount = answers.length;
-    const totalCount = test?.questions?.length || 0;
+    const currentQuestion = test.questions[currentIndex];
+
+    // Stats
+    let countAnswered = 0;
+    let countReviewed = 0;
+    let countVisited = 0;
+    let countUnvisited = 0;
+    test.questions.forEach(q => {
+        const st = answers[q._id]?.status;
+        if (st === 'answered') countAnswered++;
+        else if (st === 'reviewed') countReviewed++;
+        else if (st === 'visited') countVisited++;
+        else countUnvisited++;
+    });
+
+    const getPaletteColor = (qId) => {
+        const st = answers[qId]?.status;
+        if (st === 'answered') return 'bg-green-500 text-white border-green-600';
+        if (st === 'reviewed') return 'bg-purple-500 text-white border-purple-600';
+        if (st === 'visited') return 'bg-red-500 text-white border-red-600';
+        return 'bg-white text-gray-700 border-gray-300';
+    };
 
     return (
         <div className="fixed inset-0 bg-[#F4F6FF] z-50 flex flex-col overflow-hidden">
-            <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0">
+            <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10">
                 <div>
                     <h1 className="font-display font-bold text-lg text-gray-900">{test.title}</h1>
-                    <p className="text-xs text-gray-500 font-medium">Batch {test.batch} | +{test.positiveMarks} / -{test.negativeMarks}</p>
+                    <p className="text-xs text-gray-500 font-medium">Batch {test.batch}</p>
                 </div>
-
                 <div className="flex gap-4 items-center">
-                    {fullscreenWarnings > 0 && (
-                        <div className="flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-                            <FiAlertTriangle /> {fullscreenWarnings}/5 Warnings
-                        </div>
-                    )}
-
+                    {fullscreenWarnings > 0 && <div className="flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse"><FiAlertTriangle /> {fullscreenWarnings}/5 Warnings</div>}
                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-4 py-2 rounded-xl text-gray-800 font-mono font-bold text-lg tabular-nums">
                         <FiClock className={timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-gray-400'} />
                         <span className={timeLeft < 300 ? 'text-red-500' : ''}>{formatTime(timeLeft)}</span>
@@ -187,80 +238,126 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             </header>
 
             <div className="flex-1 flex overflow-hidden">
-                <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
-                    <div className="max-w-4xl mx-auto space-y-8 pb-32">
-                        {test.questions.map((q, qIdx) => (
-                            <div key={q._id} id={`q-${qIdx}`} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 lg:p-8">
-                                <div className="flex justify-between items-start mb-4 gap-4">
-                                    <span className="shrink-0 bg-[#27548A] text-white text-sm font-bold w-8 h-8 flex items-center justify-center rounded-lg">{qIdx + 1}</span>
-                                    <div className="flex-1 text-base text-gray-800 leading-relaxed font-medium pt-1">
-                                        <MathRenderer content={q.text} />
+                {/* Main Question Area */}
+                <main className="flex-1 flex flex-col overflow-hidden">
+                    {/* Question Header */}
+                    <div className="bg-white px-6 py-4 flex justify-between items-center border-b border-gray-200 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold text-[#27548A]">Question {currentIndex + 1}</span>
+                            <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold border border-blue-100">{currentQuestion.subject || 'General'}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm font-semibold">
+                            <span className="text-green-600 bg-green-50 px-2 py-1 rounded border border-green-100">+{currentQuestion.positiveMarks} Marks</span>
+                            <span className="text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100">-{currentQuestion.negativeMarks} Marks</span>
+                        </div>
+                    </div>
+
+                    {/* Question Content */}
+                    <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                        <div className="max-w-4xl mx-auto space-y-6">
+                            <div className="text-base text-gray-800 leading-relaxed font-medium bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <MathRenderer content={currentQuestion.text} />
+                            </div>
+
+                            {currentQuestion.imageUrl && <div className="my-4"><img src={currentQuestion.imageUrl} alt="Graphic" className="max-w-full rounded-xl border border-gray-100 shadow-sm" style={{ maxHeight: '400px' }} /></div>}
+
+                            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                {currentQuestion.type === 'Numerical' ? (
+                                    <div>
+                                        <label className="block text-sm font-bold tracking-wide text-gray-600 uppercase mb-3">Your Answer (Numerical)</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={answers[currentQuestion._id]?.numericalAnswer || ''}
+                                            onChange={e => handleInputNumerical(currentQuestion._id, e.target.value)}
+                                            className="w-full max-w-sm border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-semibold focus:outline-none focus:border-[#27548A]"
+                                            placeholder="Enter numerical value..."
+                                        />
                                     </div>
-                                </div>
-
-                                {q.imageUrl && <div className="my-4 ml-12"><img src={q.imageUrl} alt="Question Graphic" className="max-w-full rounded border border-gray-100 shadow-sm" style={{ maxHeight: '300px' }} /></div>}
-
-                                <div className="ml-12 grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
-                                    {q.options.map((opt, oIdx) => {
-                                        const isSelected = getSelectedOption(q._id) === oIdx;
-                                        return (
-                                            <label key={oIdx} className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-colors ${isSelected ? 'border-[#27548A] bg-blue-50/50' : 'border-gray-100 hover:border-[#27548A]/30 hover:bg-gray-50'}`}>
-                                                <div className="relative flex items-center justify-center">
-                                                    <input
-                                                        type="radio"
-                                                        name={`q-${q._id}`}
-                                                        checked={isSelected}
-                                                        onChange={() => handleSelectOption(q._id, oIdx)}
-                                                        className="peer w-5 h-5 opacity-0 absolute cursor-pointer"
-                                                    />
-                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-[#27548A] bg-[#27548A]' : 'border-gray-300'}`}>
-                                                        {isSelected && <div className="w-2 h-2 rounded-full bg-white"></div>}
-                                                    </div>
-                                                </div>
-                                                <span className="ml-3 text-sm text-gray-700 font-medium">
-                                                    <MathRenderer content={opt} />
-                                                </span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-
-                                {getSelectedOption(q._id) !== null && (
-                                    <div className="ml-12 mt-4 inline-flex">
-                                        <button onClick={() => handleClearOption(q._id)} className="text-[11px] font-semibold text-gray-400 hover:text-red-500 uppercase tracking-widest transition-colors">Clear Selection</button>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-bold tracking-wide text-gray-600 uppercase mb-3">Options</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {currentQuestion.options.map((opt, oIdx) => {
+                                                const isSelected = answers[currentQuestion._id]?.selectedOptionIndex === oIdx;
+                                                return (
+                                                    <label key={oIdx} className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${isSelected ? 'border-[#27548A] bg-blue-50/50' : 'border-gray-100 hover:border-[#27548A]/30 hover:bg-gray-50'}`}>
+                                                        <div className="relative flex items-center justify-center shrink-0">
+                                                            <input type="radio" name="opt" checked={isSelected} onChange={() => handleSelectOption(currentQuestion._id, oIdx)} className="peer w-5 h-5 opacity-0 absolute cursor-pointer" />
+                                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-[#27548A] bg-[#27548A]' : 'border-gray-300'}`}>
+                                                                {isSelected && <div className="w-2 h-2 rounded-full bg-white"></div>}
+                                                            </div>
+                                                        </div>
+                                                        <span className="ml-3 text-sm text-gray-800 font-medium">
+                                                            <MathRenderer content={opt} />
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        </div>
+                    </div>
+
+                    {/* Bottom Action Bar */}
+                    <div className="bg-white border-t border-gray-200 p-4 shrink-0 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <div className="flex gap-3">
+                            <button onClick={() => updateStatusAndNavigate('reviewed')} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 flex items-center gap-2 transition-colors">
+                                <FiFlag /> Mark for Review & Next
+                            </button>
+                            <button onClick={handleClearResponse} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors">
+                                Clear Response
+                            </button>
+                        </div>
+                        <button onClick={() => updateStatusAndNavigate('save')} className="px-8 py-2.5 rounded-lg font-bold text-sm bg-[#27548A] text-white hover:bg-[#1f426d] shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                            Save & Next <FiChevronRight />
+                        </button>
                     </div>
                 </main>
 
-                <aside className="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                        <div className="text-sm font-semibold text-gray-700">Attempted</div>
-                        <div className="flex items-end gap-1 mt-1">
-                            <span className="text-2xl font-bold text-[#27548A]">{attemptedCount}</span>
-                            <span className="text-gray-400 font-medium text-sm mb-0.5">/ {totalCount}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-3">
-                            <div className="bg-[#27548A] h-1.5 rounded-full transition-all" style={{ width: `${(attemptedCount / totalCount) * 100}%` }}></div>
+                {/* Right Sidebar - Palette */}
+                <aside className="w-[320px] bg-white border-l border-gray-200 flex flex-col shrink-0 shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.02)] z-10">
+                    {/* User & Timer Panel */}
+                    <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex flex-col gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg shrink-0">👤</div>
+                            <div className="leading-tight">
+                                <div className="text-sm font-bold text-gray-900 line-clamp-1">Batch {attemptData.studentId}</div>
+                                <div className="text-xs text-gray-500 font-semibold">{test.questions.length} Questions</div>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4">
+
+                    {/* Status Legends */}
+                    <div className="p-4 border-b border-gray-100 grid grid-cols-2 gap-y-3 gap-x-2 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-green-500 border border-green-600 flex items-center justify-center text-white">{countAnswered}</div> Answered</div>
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-red-500 border border-red-600 flex items-center justify-center text-white">{countVisited}</div> Not Answered</div>
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-400">{countUnvisited}</div> Not Visited</div>
+                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-purple-500 border border-purple-600 flex items-center justify-center text-white">{countReviewed}</div> Review</div>
+                    </div>
+
+                    {/* Question Palette Grid */}
+                    <div className="flex-1 overflow-y-auto p-4 bg-gray-50/30">
+                        <h3 className="font-bold text-sm text-gray-800 mb-3">Question Palette</h3>
                         <div className="grid grid-cols-5 gap-2">
-                            {test.questions.map((q, qIdx) => {
-                                const isAns = getSelectedOption(q._id) !== null;
-                                return (
-                                    <a key={q._id} href={`#q-${qIdx}`} className={`flex items-center justify-center h-8 text-xs font-bold rounded-lg border-2 transition-colors ${isAns ? 'bg-[#27548A] border-[#27548A] text-white' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                                        {qIdx + 1}
-                                    </a>
-                                );
-                            })}
+                            {test.questions.map((q, qIdx) => (
+                                <button
+                                    key={q._id}
+                                    onClick={() => navigateQuestion(qIdx)}
+                                    className={`relative flex items-center justify-center h-10 text-sm font-bold rounded-lg border-2 transition-all ${getPaletteColor(q._id)} ${currentIndex === qIdx ? 'ring-2 ring-blue-400 ring-offset-1 scale-105' : 'hover:opacity-80'}`}
+                                >
+                                    {qIdx + 1}
+                                </button>
+                            ))}
                         </div>
                     </div>
-                    <div className="p-4 border-t border-gray-200">
-                        <button onClick={() => handleSubmit(false)} disabled={submitting} className="w-full btn-primary py-3 text-sm flex justify-center items-center gap-2 shadow-md">
-                            <FiCheck size={16} /> {submitting ? 'Submitting...' : 'Submit Test'}
+
+                    {/* Submit Button */}
+                    <div className="p-5 border-t border-gray-200 bg-white">
+                        <button onClick={() => handleSubmit(false)} disabled={submitting} className="w-full btn-primary py-3.5 text-[15px] font-bold uppercase tracking-widest flex justify-center items-center gap-2 shadow-lg">
+                            <FiCheck size={18} /> {submitting ? 'Submitting...' : 'Submit Test'}
                         </button>
                     </div>
                 </aside>

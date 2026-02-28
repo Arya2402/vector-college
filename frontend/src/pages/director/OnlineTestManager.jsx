@@ -25,7 +25,7 @@ function Modal({ title, onClose, children, wide }) {
 function TestBuilderForm({ initialData, onClose, onSaved }) {
     const [form, setForm] = useState(initialData || {
         title: '', description: '', batch: '', password: '', durationMinutes: 60,
-        maxAttempts: 1, positiveMarks: 4, negativeMarks: 1, status: 'draft',
+        maxAttempts: 1, status: 'draft',
         questions: []
     });
     const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ function TestBuilderForm({ initialData, onClose, onSaved }) {
     const addQuestion = () => {
         setForm(f => ({
             ...f,
-            questions: [...f.questions, { text: '', imageUrl: '', options: ['', '', '', ''], correctOptionIndex: 0, subtopic: '' }]
+            questions: [...f.questions, { text: '', imageUrl: '', type: 'MCQ', subject: 'Mathematics', positiveMarks: 4, negativeMarks: 1, options: ['', '', '', ''], correctOptionIndex: 0, correctNumericalAnswer: '', subtopic: '' }]
         }));
     };
 
@@ -100,10 +100,7 @@ function TestBuilderForm({ initialData, onClose, onSaved }) {
                     <input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field text-sm" required /></div>
                 <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Duration (Min)</label>
                     <input type="number" min="1" value={form.durationMinutes} onChange={e => setForm({ ...form, durationMinutes: Number(e.target.value) })} className="input-field text-sm" required /></div>
-                <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">+ Marks per correct</label>
-                    <input type="number" value={form.positiveMarks} onChange={e => setForm({ ...form, positiveMarks: Number(e.target.value) })} className="input-field text-sm" required /></div>
-                <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">- Marks per wrong</label>
-                    <input type="number" value={form.negativeMarks} onChange={e => setForm({ ...form, negativeMarks: Number(e.target.value) })} className="input-field text-sm" required /></div>
+
                 <div><label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Status</label>
                     <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className="input-field text-sm">
                         <option value="draft">Draft</option><option value="active">Active</option><option value="completed">Completed</option>
@@ -136,6 +133,33 @@ function TestBuilderForm({ initialData, onClose, onSaved }) {
                                 </div>
                             </div>
 
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Subject</label>
+                                    <select value={q.subject} onChange={e => updateQuestion(qIdx, 'subject', e.target.value)} className="input-field text-sm">
+                                        <option value="Mathematics">Mathematics</option>
+                                        <option value="Physics">Physics</option>
+                                        <option value="Chemistry">Chemistry</option>
+                                        <option value="General">General</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Type</label>
+                                    <select value={q.type || 'MCQ'} onChange={e => updateQuestion(qIdx, 'type', e.target.value)} className="input-field text-sm">
+                                        <option value="MCQ">MCQ</option>
+                                        <option value="Numerical">Numerical</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">+ Marks</label>
+                                    <input type="number" value={q.positiveMarks} onChange={e => updateQuestion(qIdx, 'positiveMarks', Number(e.target.value))} className="input-field text-sm" required />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">- Marks</label>
+                                    <input type="number" value={q.negativeMarks} onChange={e => updateQuestion(qIdx, 'negativeMarks', Number(e.target.value))} className="input-field text-sm" required />
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-3 mb-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Subtopic Tag</label>
@@ -153,14 +177,21 @@ function TestBuilderForm({ initialData, onClose, onSaved }) {
 
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Options & Correct Answer</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {q.options.map((opt, oIdx) => (
-                                        <div key={oIdx} className="flex items-center gap-2 bg-white rounded-lg border p-1 border-gray-200">
-                                            <input type="radio" name={`correct-${qIdx}`} checked={q.correctOptionIndex === oIdx} onChange={() => updateQuestion(qIdx, 'correctOptionIndex', oIdx)} className="ml-2 w-4 h-4 text-[#27548A]" required />
-                                            <input type="text" value={opt} onChange={e => updateOption(qIdx, oIdx, e.target.value)} className="w-full bg-transparent border-none text-sm focus:outline-none p-1" placeholder={`Option ${oIdx + 1}`} required />
-                                        </div>
-                                    ))}
-                                </div>
+                                {(!q.type || q.type === 'MCQ') ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {q.options.map((opt, oIdx) => (
+                                            <div key={oIdx} className="flex items-center gap-2 bg-white rounded-lg border p-1 border-gray-200">
+                                                <input type="radio" name={`correct-${qIdx}`} checked={q.correctOptionIndex === oIdx} onChange={() => updateQuestion(qIdx, 'correctOptionIndex', oIdx)} className="ml-2 w-4 h-4 text-[#27548A]" required />
+                                                <input type="text" value={opt} onChange={e => updateOption(qIdx, oIdx, e.target.value)} className="w-full bg-transparent border-none text-sm focus:outline-none p-1" placeholder={`Option ${oIdx + 1}`} required />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-lg border p-3 border-gray-200">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-1">Correct Numerical Answer</label>
+                                        <input type="number" step="any" value={q.correctNumericalAnswer} onChange={e => updateQuestion(qIdx, 'correctNumericalAnswer', Number(e.target.value))} className="input-field text-sm w-full max-w-xs" placeholder="e.g. 42.5" required />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

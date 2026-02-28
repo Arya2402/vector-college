@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 const answerSchema = new mongoose.Schema({
     questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
-    selectedOptionIndex: { type: Number } // null or undefined means unattempted
+    selectedOptionIndex: { type: Number }, // For MCQ
+    numericalAnswer: { type: Number }, // For Numerical
+    status: { type: String, enum: ['unvisited', 'visited', 'answered', 'reviewed'], default: 'unvisited' }
 }, { _id: false });
 
 const testAttemptSchema = new mongoose.Schema({

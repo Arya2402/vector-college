@@ -203,25 +203,41 @@ router.post('/attempt/:attemptId/submit', protect, authorize('student'), async (
         let correct = 0;
         let wrong = 0;
         let unattempted = 0;
+        let totalMarks = 0;
 
         const formattedAnswers = [];
 
         test.questions.forEach(q => {
             const studentAns = answers.find(a => String(a.questionId) === String(q._id));
 
-            if (!studentAns || studentAns.selectedOptionIndex === null || studentAns.selectedOptionIndex === undefined) {
+            if (!studentAns || (studentAns.selectedOptionIndex == null && studentAns.numericalAnswer == null)) {
                 unattempted++;
-                formattedAnswers.push({ questionId: q._id, selectedOptionIndex: null });
-            } else if (parseInt(studentAns.selectedOptionIndex) === q.correctOptionIndex) {
-                correct++;
-                formattedAnswers.push({ questionId: q._id, selectedOptionIndex: parseInt(studentAns.selectedOptionIndex) });
+                formattedAnswers.push({ questionId: q._id });
             } else {
-                wrong++;
-                formattedAnswers.push({ questionId: q._id, selectedOptionIndex: parseInt(studentAns.selectedOptionIndex) });
+                let isCorrect = false;
+
+                if (q.type === 'Numerical') {
+                    if (Number(studentAns.numericalAnswer) === Number(q.correctNumericalAnswer)) {
+                        isCorrect = true;
+                    }
+                    formattedAnswers.push({ questionId: q._id, numericalAnswer: studentAns.numericalAnswer });
+                } else {
+                    // Default MCQ
+                    if (parseInt(studentAns.selectedOptionIndex) === q.correctOptionIndex) {
+                        isCorrect = true;
+                    }
+                    formattedAnswers.push({ questionId: q._id, selectedOptionIndex: parseInt(studentAns.selectedOptionIndex) });
+                }
+
+                if (isCorrect) {
+                    correct++;
+                    totalMarks += q.positiveMarks;
+                } else {
+                    wrong++;
+                    totalMarks -= q.negativeMarks;
+                }
             }
         });
-
-        const totalMarks = (correct * test.positiveMarks) - (wrong * test.negativeMarks);
 
         attempt.status = autoSubmitReason ? 'auto-submitted-violation' : 'submitted';
         attempt.endTime = Date.now();
