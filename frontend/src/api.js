@@ -13,7 +13,9 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('vectorAdminToken');
+  const adminToken = localStorage.getItem('vectorAdminToken');
+  const academicToken = localStorage.getItem('vectorAcademicToken');
+  const token = adminToken || academicToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -23,7 +25,9 @@ const AcademicAPI = axios.create({
 });
 
 AcademicAPI.interceptors.request.use((config) => {
-  const token = localStorage.getItem('vectorAcademicToken');
+  const adminToken = localStorage.getItem('vectorAdminToken');
+  const academicToken = localStorage.getItem('vectorAcademicToken');
+  const token = academicToken || adminToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
