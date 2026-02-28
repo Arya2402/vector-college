@@ -50,7 +50,7 @@ function AppRoutes() {
         } />
         <Route path="/directors-batch/admin-login" element={<DirectorLogin />} />
         <Route path="/directors-batch/*" element={
-          <AcademicRoute role="admin">
+          <AcademicRoute role="director">
             <DirectorDashboard />
           </AcademicRoute>
         } />

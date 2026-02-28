@@ -15,11 +15,11 @@ export default function DirectorLogin() {
         setLoading(true);
         try {
             const result = await academicLogin(form.userId, form.password);
-            if (result.role === 'admin') {
+            if (result.role === 'director') {
                 toast.success('Welcome, Director');
                 navigate('/directors-batch');
             } else {
-                toast.error('Admin access required');
+                toast.error('Director access required');
             }
         } catch (err) {
             toast.error(err.response?.data?.message || 'Login failed');

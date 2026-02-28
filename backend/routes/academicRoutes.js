@@ -7,8 +7,8 @@ const Marks = require('../models/Marks');
 const Attendance = require('../models/Attendance');
 const Test = require('../models/Test');
 
-// All routes require admin role
-router.use(protect, authorize('admin'));
+// All routes require admin or director role
+router.use(protect, authorize('admin', 'director'));
 
 // ==================== STUDENT MANAGEMENT ====================
 

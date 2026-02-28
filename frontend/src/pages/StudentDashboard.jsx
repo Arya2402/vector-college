@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiArrowLeft, FiChevronRight } from 'react-icons/fi';
+import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiArrowLeft, FiChevronRight, FiMonitor } from 'react-icons/fi';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests, fetchStudentTestDetail } from '../api';
+import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests, fetchStudentTestDetail, fetchOnlineTests, startOnlineTest } from '../api';
+import TestRunner from '../components/CBT/TestRunner';
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
     return (
@@ -242,9 +243,9 @@ function TestDetailView({ testId, onBack }) {
                                 <tr key={r.studentId} className={`border-b border-gray-50 transition-colors ${r.isMe ? 'bg-blue-50/70 font-semibold' : 'hover:bg-gray-50/50'}`}>
                                     <td className="py-2.5 px-4">
                                         <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${r.rank === 1 ? 'bg-[#F7D774] text-amber-800' :
-                                                r.rank === 2 ? 'bg-gray-200 text-gray-700' :
-                                                    r.rank === 3 ? 'bg-orange-200 text-orange-800' :
-                                                        'bg-gray-50 text-gray-500'
+                                            r.rank === 2 ? 'bg-gray-200 text-gray-700' :
+                                                r.rank === 3 ? 'bg-orange-200 text-orange-800' :
+                                                    'bg-gray-50 text-gray-500'
                                             }`}>{r.rank}</span>
                                     </td>
                                     <td className="py-2.5 px-4">
@@ -423,23 +424,122 @@ function TestsView() {
     );
 }
 
+// ==================== ONLINE TESTS VIEW (CBT) ====================
+function OnlineTestsView({ onStartTest }) {
+    const [tests, setTests] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [passwordPrompt, setPasswordPrompt] = useState(null);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [starting, setStarting] = useState(false);
+
+    useEffect(() => {
+        fetchOnlineTests().then(r => setTests(r.data)).catch(() => toast.error('Failed to load Online Tests')).finally(() => setLoading(false));
+    }, []);
+
+    const handleJoinClick = (test) => {
+        setPasswordPrompt(test);
+        setPasswordInput('');
+    };
+
+    const handleStartEvent = async (e) => {
+        e.preventDefault();
+        setStarting(true);
+        try {
+            const res = await startOnlineTest(passwordPrompt._id, { password: passwordInput });
+            onStartTest(passwordPrompt._id, res.data); // res.data is the attempt object
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to start test');
+        } finally {
+            setStarting(false);
+        }
+    };
+
+    if (loading) return <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-[#27548A] border-t-transparent rounded-full animate-spin" /></div>;
+
+    return (
+        <div>
+            <h2 className="font-display font-semibold text-gray-800 text-lg mb-4">Live & Upcoming CBTs</h2>
+            {tests.length === 0 ? <div className="text-center py-10 text-gray-400 font-sans border border-dashed rounded-2xl">No online tests available.</div> : (
+                <div className="grid gap-4">
+                    {tests.map(t => (
+                        <div key={t._id} className="bg-white rounded-[16px] border border-l-4 border-l-[#27548A] border-[#E5E7EB] p-5 shadow-soft">
+                            <div className="flex items-start justify-between mb-2">
+                                <div>
+                                    <h3 className="text-gray-900 font-display font-semibold">{t.title}</h3>
+                                    <p className="text-gray-400 text-[10px] mt-1 uppercase tracking-widest font-semibold">Batch: {t.batch}</p>
+                                </div>
+                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${t.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{t.status}</span>
+                            </div>
+                            <div className="flex gap-4 text-xs mt-3 mb-4 font-medium text-gray-600">
+                                <span>{t.durationMinutes} minutes</span>
+                                <span>+{t.positiveMarks} / -{t.negativeMarks} marks</span>
+                                <span>Max {t.maxAttempts} attempt{t.maxAttempts > 1 ? 's' : ''}</span>
+                            </div>
+                            <button onClick={() => handleJoinClick(t)} disabled={t.status !== 'active'} className="btn-primary py-1.5 px-4 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                                Join Exam
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {passwordPrompt && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+                        <h3 className="font-display font-semibold text-lg mb-1">Join {passwordPrompt.title}</h3>
+                        <p className="text-xs text-gray-500 mb-4">Please enter the test password to begin. Once started, you must remain in fullscreen mode.</p>
+                        <form onSubmit={handleStartEvent}>
+                            <input type="text" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="input-field text-sm mb-4" placeholder="Test Password" required autoFocus />
+                            <div className="flex gap-2">
+                                <button type="submit" disabled={starting} className="btn-primary flex-1">{starting ? 'Joining...' : 'Start Test'}</button>
+                                <button type="button" onClick={() => setPasswordPrompt(null)} className="btn-outline flex-1">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const tabs = [
     { key: 'dashboard', label: 'Dashboard', icon: FiHome },
     { key: 'marks', label: 'Results', icon: FiAward },
     { key: 'attendance', label: 'Attendance', icon: FiCheckSquare },
-    { key: 'tests', label: 'Upcoming', icon: FiCalendar },
+    { key: 'online-tests', label: 'Live CBT', icon: FiMonitor },
+    { key: 'tests', label: 'Offline', icon: FiCalendar },
 ];
 
 export default function StudentDashboard() {
     const [active, setActive] = useState('dashboard');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // CBT State
+    const [activeTestId, setActiveTestId] = useState(null);
+    const [activeAttemptData, setActiveAttemptData] = useState(null);
+
     const { logoutAcademic } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => { fetchStudentDashboard().then(r => setData(r.data)).catch(() => toast.error('Failed to load dashboard')).finally(() => setLoading(false)); }, []);
 
     const handleLogout = () => { logoutAcademic(); navigate('/academic-login'); toast.success('Logged out'); };
+
+    const handleStartCBT = (testId, attemptData) => {
+        setActiveTestId(testId);
+        setActiveAttemptData(attemptData);
+    };
+
+    const handleCBTFinish = () => {
+        setActiveTestId(null);
+        setActiveAttemptData(null);
+        setActive('marks'); // Auto switch to marks/results tab when done
+    };
+
+    if (activeTestId && activeAttemptData) {
+        return <TestRunner testId={activeTestId} attemptData={activeAttemptData} onFinish={handleCBTFinish} />;
+    }
 
     return (
         <div className="min-h-screen bg-[#F4F6FF]">
@@ -461,6 +561,7 @@ export default function StudentDashboard() {
                         {active === 'dashboard' && <DashboardView data={data} />}
                         {active === 'marks' && <MarksView />}
                         {active === 'attendance' && <AttendanceView />}
+                        {active === 'online-tests' && <OnlineTestsView onStartTest={handleStartCBT} />}
                         {active === 'tests' && <TestsView />}
                     </>
                 )}

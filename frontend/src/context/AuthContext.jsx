@@ -81,11 +81,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Academic login (admin + student only)
+  // Academic login (director + student only)
   const academicLogin = async (userId, password) => {
     try {
       const res = await axios.post(`${BASE}/api/auth/login`, { userId: parseInt(userId), password });
       if (res.data.success) {
+        // If an admin tries to login via academic portal, we should block them as they belong only in CMS
+        if (res.data.role === 'admin') {
+          return { success: false, message: 'Admins must login via the Website Admin Panel' };
+        }
+
         localStorage.setItem('vectorAcademicToken', res.data.token);
         const user = {
           userId: res.data.userId,
@@ -93,13 +98,6 @@ export const AuthProvider = ({ children }) => {
           token: res.data.token,
         };
         setAcademicUser(user);
-
-        // If admin, also set CMS token
-        if (res.data.role === 'admin') {
-          localStorage.setItem('vectorAdminToken', res.data.token);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-          setIsAdmin(true);
-        }
 
         return { success: true, role: res.data.role };
       }

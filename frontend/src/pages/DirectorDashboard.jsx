@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
     FiUsers, FiCalendar, FiBarChart2, FiLogOut, FiPlus, FiTrash2,
-    FiArrowLeft, FiChevronRight, FiMenu, FiX, FiEye, FiCheckSquare
+    FiArrowLeft, FiChevronRight, FiMenu, FiX, FiEye, FiCheckSquare, FiMonitor
 } from 'react-icons/fi';
 import * as api from '../api';
 import {
     PieChart, Pie, Cell, Tooltip, Legend,
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer
 } from 'recharts';
+import OnlineTestManager from './director/OnlineTestManager';
 
 // ==================== CATEGORY PRESETS ====================
 const CATEGORY_PRESETS = {
@@ -481,7 +482,8 @@ function StudentAnalysis({ student, onBack }) {
 // ==================== MAIN DASHBOARD ====================
 const sidebarItems = [
     { key: 'students', label: 'Students', icon: FiUsers },
-    { key: 'tests', label: 'Tests', icon: FiCalendar },
+    { key: 'tests', label: 'Offline Tests', icon: FiCalendar },
+    { key: 'online-tests', label: 'Online Tests (CBT)', icon: FiMonitor },
     { key: 'attendance', label: 'Attendance', icon: FiCheckSquare },
     { key: 'analytics', label: 'Analytics', icon: FiBarChart2 },
 ];
@@ -658,6 +660,12 @@ export default function DirectorDashboard() {
                                 ))}
                             </div>
                         )}
+                    </div>
+                );
+            case 'online-tests':
+                return (
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 mt-4 min-h-[70vh]">
+                        <OnlineTestManager />
                     </div>
                 );
             case 'attendance':

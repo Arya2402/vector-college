@@ -99,10 +99,26 @@ export const submitMarksBulk = (testId, entries) => API.post(`/academic/tests/${
 // Attendance (batch-wise)
 export const recordBatchAttendance = (data) => API.post('/academic/attendance/batch', data);
 export const fetchAttendanceByDate = (date, batch) => API.get(`/academic/attendance/date/${date}`, { params: batch ? { batch } : {} });
-export const fetchStudentAttendanceAdmin = (studentId) => API.get(`/academic/attendance/student/${studentId}`);
+export const fetchAttendanceByStudent = (studentId) => API.get(`/academic/attendance/student/${studentId}`);
 
 // Analytics
 export const fetchAnalytics = () => API.get('/academic/analytics');
+
+// Online Testing Platform (CBT) APIs
+export const uploadQuestionImage = (formData) => API.post('/online-tests/upload-image', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const createOnlineTest = (data) => API.post('/online-tests', data);
+export const fetchOnlineTests = () => API.get('/online-tests');
+export const fetchOnlineTestDetail = (id) => API.get(`/online-tests/${id}`);
+export const updateOnlineTest = (id, data) => API.put(`/online-tests/${id}`, data);
+export const deleteOnlineTest = (id) => API.delete(`/online-tests/${id}`);
+export const fetchLiveAttempts = (id) => API.get(`/online-tests/${id}/live`);
+
+// Student CBT APIs
+export const startOnlineTest = (id, data) => API.post(`/online-tests/${id}/start`, data);
+export const pingTestAttempt = (attemptId, data) => API.post(`/online-tests/attempt/${attemptId}/ping`, data);
+export const submitTestAttempt = (attemptId, data) => API.post(`/online-tests/attempt/${attemptId}/submit`, data);
 
 // ==================== STUDENT APIs ====================
 

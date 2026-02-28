@@ -25,17 +25,18 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/content', require('./routes/content'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/academic', require('./routes/academicRoutes'));
+app.use('/api/online-tests', require('./routes/onlineTestRoutes'));
 app.use('/api/student', require('./routes/studentRoutes'));
 
 // Health check
 app.get('/', (req, res) => res.json({ message: 'Vector College API is running!' }));
 
-// Seed default admin user
+// Seed default admin and director users
 const seedAdmin = async () => {
   const User = require('./models/User');
   try {
-    const existing = await User.findOne({ userId: 100001 });
-    if (!existing) {
+    const existingAdmin = await User.findOne({ userId: 100001 });
+    if (!existingAdmin) {
       await User.create({
         userId: 100001,
         password: process.env.ADMIN_PASSWORD || 'vector@password',
@@ -43,8 +44,18 @@ const seedAdmin = async () => {
       });
       console.log('Default admin user seeded (userId: 100001)');
     }
+
+    const existingDirector = await User.findOne({ userId: 200000 });
+    if (!existingDirector) {
+      await User.create({
+        userId: 200000,
+        password: process.env.ADMIN_PASSWORD || 'vector@password',
+        role: 'director',
+      });
+      console.log('Default director user seeded (userId: 200000)');
+    }
   } catch (err) {
-    console.error('Admin seed error:', err.message);
+    console.error('Seed error:', err.message);
   }
 };
 
