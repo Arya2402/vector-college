@@ -9,13 +9,15 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // state: { [questionId]: { selectedOptionIndex, numericalAnswer, status: 'visited'|'answered'|'reviewed' } }
     const [answers, setAnswers] = useState({});
     const [currentIndex, setCurrentIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState(0);
     const [submitting, setSubmitting] = useState(false);
     const [fullscreenWarnings, setFullscreenWarnings] = useState(attemptData?.fullscreenExits || 0);
     const [isViolation, setIsViolation] = useState(false);
+
+    // Add ref for the test container to make fullscreen more robust against random clicks
+    const containerRef = React.useRef(null);
 
     // Initialize Unvisited statuses
     useEffect(() => {
@@ -99,7 +101,12 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             handleSubmit(false, true);
         } else {
             toast.error(`WARNING: You exited fullscreen. Warning ${newWarnings}/5. At 5, your test will be auto-submitted.`);
-            setTimeout(() => { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => { }); }, 3000);
+            setTimeout(() => {
+                if (!document.fullscreenElement) {
+                    const el = containerRef.current || document.documentElement;
+                    el.requestFullscreen().catch(() => { });
+                }
+            }, 3000);
         }
     }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
 
@@ -108,7 +115,11 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         const handleVisibilityChange = () => { if (document.hidden && !submitting && !isViolation) handleFullscreenExit(); };
         document.addEventListener('fullscreenchange', checkFullscreen);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        document.documentElement.requestFullscreen().catch(() => { toast.error('Please put your browser in fullscreen.'); });
+
+        // Use container-specific fullscreen to prevent click-outs
+        const el = containerRef.current || document.documentElement;
+        el.requestFullscreen().catch(() => { toast.error('Please put your browser in fullscreen.'); });
+
         return () => {
             document.removeEventListener('fullscreenchange', checkFullscreen);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -222,7 +233,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-[#F4F6FF] z-50 flex flex-col overflow-hidden">
+        <div ref={containerRef} className="fixed inset-0 bg-[#F4F6FF] z-50 flex flex-col overflow-hidden">
             <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10">
                 <div>
                     <h1 className="font-display font-bold text-lg text-gray-900">{test.title}</h1>
