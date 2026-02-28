@@ -3,7 +3,7 @@ import * as api from '../../api';
 import toast from 'react-hot-toast';
 import { FiPlus, FiTrash2, FiEdit2, FiClock, FiVideo, FiImage } from 'react-icons/fi';
 import 'katex/dist/katex.min.css';
-import { InlineMath } from 'react-katex';
+import { MathRenderer } from '../../components/CBT/MathRenderer';
 
 function Modal({ title, onClose, children, wide }) {
     return (
@@ -132,11 +132,7 @@ function TestBuilderForm({ initialData, onClose, onSaved }) {
 
                                 <div className="p-3 bg-white border border-gray-100 rounded-lg text-sm max-h-32 overflow-y-auto">
                                     <span className="text-xs text-blue-500 font-semibold block mb-1">Preview LaTeX:</span>
-                                    <React.Fragment>
-                                        {q.text.split('$').map((segment, index) =>
-                                            index % 2 === 1 ? <InlineMath key={index}>{segment}</InlineMath> : segment
-                                        )}
-                                    </React.Fragment>
+                                    <MathRenderer content={q.text} />
                                 </div>
                             </div>
 

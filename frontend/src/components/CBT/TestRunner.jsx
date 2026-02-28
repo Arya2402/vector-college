@@ -3,7 +3,7 @@ import * as api from '../../api';
 import toast from 'react-hot-toast';
 import { FiClock, FiAlertTriangle, FiCheck } from 'react-icons/fi';
 import 'katex/dist/katex.min.css';
-import { InlineMath } from 'react-katex';
+import { MathRenderer } from './MathRenderer';
 
 export default function TestRunner({ testId, attemptData, onFinish }) {
     const [test, setTest] = useState(null);
@@ -194,9 +194,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
                                 <div className="flex justify-between items-start mb-4 gap-4">
                                     <span className="shrink-0 bg-[#27548A] text-white text-sm font-bold w-8 h-8 flex items-center justify-center rounded-lg">{qIdx + 1}</span>
                                     <div className="flex-1 text-base text-gray-800 leading-relaxed font-medium pt-1">
-                                        {q.text.split('$').map((segment, index) =>
-                                            index % 2 === 1 ? <InlineMath key={index}>{segment}</InlineMath> : segment
-                                        )}
+                                        <MathRenderer content={q.text} />
                                     </div>
                                 </div>
 
@@ -220,7 +218,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
                                                     </div>
                                                 </div>
                                                 <span className="ml-3 text-sm text-gray-700 font-medium">
-                                                    {opt.split('$').map((seg, idx) => idx % 2 === 1 ? <InlineMath key={idx}>{seg}</InlineMath> : seg)}
+                                                    <MathRenderer content={opt} />
                                                 </span>
                                             </label>
                                         );
