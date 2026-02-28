@@ -20,33 +20,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     // Add ref for the test container to make fullscreen more robust against random clicks
     const containerRef = React.useRef(null);
 
-    // Initialize Unvisited statuses
-    useEffect(() => {
-        api.fetchOnlineTestDetail(testId).then(res => {
-            setTest(res.data);
-
-            const startStr = attemptData.startTime;
-            const startTime = new Date(startStr).getTime();
-            const durationMs = res.data.durationMinutes * 60 * 1000;
-            const endTime = startTime + durationMs;
-            const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-            setTimeLeft(remaining);
-            setLoading(false);
-
-            // Mark first question as visited
-            if (res.data.questions?.length > 0) {
-                const qId = res.data.questions[0]._id;
-                setAnswers(prev => ({
-                    ...prev,
-                    [qId]: { ...prev[qId], status: 'visited' }
-                }));
-            }
-        }).catch(() => {
-            toast.error('Failed to load test contents');
-            onFinish();
-        });
-    }, [testId, attemptData.startTime, onFinish]);
-
     const formatSubmitAnswers = useCallback(() => {
         return Object.entries(answers).map(([questionId, data]) => ({
             questionId,
@@ -74,6 +47,52 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         }
     }, [attemptData._id, formatSubmitAnswers, fullscreenWarnings, onFinish]);
 
+    const enterFullscreen = useCallback(() => {
+        if (containerRef.current) {
+            containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
+                document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
+            });
+        }
+    }, []);
+
+    const handleFullscreenExit = useCallback(async () => {
+        if (submitting || isViolation) return;
+
+        const newWarnings = fullscreenWarnings + 1;
+        setFullscreenWarnings(newWarnings);
+        try { await api.pingTestAttempt(attemptData._id, { fullscreenExits: newWarnings }); } catch (err) { }
+
+        if (newWarnings >= 5) {
+            setIsViolation(true);
+            toast.error('Test automatically submitted due to multiple fullscreen exits.');
+            handleSubmit(false, true);
+        } else {
+            toast.error(`WARNING: You exited fullscreen. Warning ${newWarnings}/5. At 5, your test will be auto-submitted.`);
+        }
+    }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
+
+    // Initial Load
+    useEffect(() => {
+        api.fetchOnlineTestDetail(testId).then(res => {
+            setTest(res.data);
+            const startStr = attemptData.startTime;
+            const startTime = new Date(startStr).getTime();
+            const durationMs = res.data.durationMinutes * 60 * 1000;
+            const endTime = startTime + durationMs;
+            const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+            setLoading(false);
+
+            if (res.data.questions?.length > 0) {
+                const qId = res.data.questions[0]._id;
+                setAnswers(prev => ({ ...prev, [qId]: { ...prev[qId], status: 'visited' } }));
+            }
+        }).catch(() => {
+            toast.error('Failed to load test contents');
+            onFinish();
+        });
+    }, [testId, attemptData.startTime, onFinish]);
+
     // Timer logic
     useEffect(() => {
         if (loading || timeLeft <= 0 || submitting || isViolation) return;
@@ -90,72 +109,12 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         return () => clearInterval(timer);
     }, [loading, timeLeft, submitting, isViolation, handleSubmit]);
 
-    // Fullscreen enforcement
-    const [isFullscreenLocked, setIsFullscreenLocked] = useState(false);
-
-    const enterFullscreen = useCallback(() => {
-        if (containerRef.current) {
-            containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
-                document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
-            });
-        }
-    }, []);
-
-    const handleFullscreenExit = useCallback(async () => {
-        if (submitting || isViolation) return;
-
-        // If the browser thinks we exited but we shouldn't have, log warning and try to force it back immediately
-        const newWarnings = fullscreenWarnings + 1;
-        setFullscreenWarnings(newWarnings);
-        try { await api.pingTestAttempt(attemptData._id, { fullscreenExits: newWarnings }); } catch (err) { }
-
-        if (newWarnings >= 5) {
-            setIsViolation(true);
-            toast.error('Test automatically submitted due to multiple fullscreen exits.');
-            handleSubmit(false, true);
-        } else {
-            toast.error(`WARNING: You exited fullscreen. Warning ${newWarnings}/5. At 5, your test will be auto-submitted.`);
-
-            // Aggressively try to re-enter
-            setTimeout(() => {
-                if (!document.fullscreenElement && containerRef.current) {
-                    containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
-                        document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
-                    });
-                }
-            }, 500);
-        }
-    }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
-
+    // Fullscreen Listeners
     useEffect(() => {
         const handleFsChange = () => {
             const isActive = !!document.fullscreenElement;
             setIsFullscreenActive(isActive);
             if (!isActive && !submitting && !isViolation) {
-                handleFullscreenExit();
-            }
-        };
-        document.addEventListener('fullscreenchange', handleFsChange);
-        return () => document.removeEventListener('fullscreenchange', handleFsChange);
-    }, [handleFullscreenExit, submitting, isViolation]);
-
-    useEffect(() => {
-        // Initial Fullscreen Request
-        const lockFullscreen = async () => {
-            try {
-                const el = containerRef.current || document.documentElement;
-                if (el.requestFullscreen) {
-                    await el.requestFullscreen({ navigationUI: "hide" });
-                    setIsFullscreenLocked(true);
-                }
-            } catch (err) {
-                toast.error('Please put your browser in fullscreen.');
-            }
-        };
-
-        const checkFullscreen = () => {
-            if (!document.fullscreenElement && !submitting && !isViolation) {
-                setIsFullscreenLocked(false);
                 handleFullscreenExit();
             }
         };
@@ -166,40 +125,14 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             }
         };
 
-        // Aggressive click trap to prevent accidental exits via UI clicking
-        const trapClick = (e) => {
-            // Only stop default if it's clicking on nothing important to prevent bugs where forms/links force exits
-            if (!document.fullscreenElement && !submitting && !isViolation) {
-                lockFullscreen();
-            }
-        };
-
-        document.addEventListener('fullscreenchange', checkFullscreen);
+        document.addEventListener('fullscreenchange', handleFsChange);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        document.addEventListener('click', trapClick, { capture: true }); // Catch early
-
-        lockFullscreen();
-
-        // Enforce loop (Browser API sometimes drops it quietly during complex renders)
-        const lockInterval = setInterval(() => {
-            if (!document.fullscreenElement && !submitting && !isViolation && isFullscreenLocked) {
-                // If it was supposed to be locked but fell out quietly
-                checkFullscreen();
-            }
-        }, 2000);
-
         return () => {
-            clearInterval(lockInterval);
-            document.removeEventListener('fullscreenchange', checkFullscreen);
+            document.removeEventListener('fullscreenchange', handleFsChange);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            document.removeEventListener('click', trapClick, { capture: true });
-
-            // Only exit fullscreen if we are actually done or unmounting due to completion/violation
-            if ((submitting || isViolation) && document.fullscreenElement) {
-                document.exitFullscreen().catch(() => { });
-            }
         };
-    }, [handleFullscreenExit, submitting, isViolation, isFullscreenLocked]);
+    }, [handleFullscreenExit, submitting, isViolation]);
+
 
 
     const handleSelectOption = (questionId, optionIndex) => {
