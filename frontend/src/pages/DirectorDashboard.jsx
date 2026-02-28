@@ -562,7 +562,9 @@ export default function DirectorDashboard() {
         if (active !== 'attendance' || !attendanceBatch) return;
         api.fetchAttendanceByDate(attendanceDate, attendanceBatch).then(res => {
             const map = {};
-            res.data.forEach(r => map[r.studentId] = r.status);
+            // Fix: the backend returns { date, records: [...] }
+            const recordsArray = Array.isArray(res.data) ? res.data : (res.data.records || []);
+            recordsArray.forEach(r => map[r.studentId] = r.status);
             setAttendanceRecords(map);
         }).catch(() => toast.error('Failed to load attendance'));
     }, [active, attendanceDate, attendanceBatch]);
@@ -676,9 +678,29 @@ export default function DirectorDashboard() {
                     <div>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-gray-900 font-display font-semibold text-lg">Batch Attendance</h2>
-                            <button onClick={handleSaveAttendance} disabled={savingAttendance || !attendanceBatch || batchStudents.length === 0} className="btn-primary text-xs py-1.5 px-4 disabled:opacity-60">
-                                {savingAttendance ? 'Saving...' : 'Save Attendance'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => {
+                                    const newMap = { ...attendanceRecords };
+                                    batchStudents.forEach(s => newMap[s.studentId] = 'Present');
+                                    setAttendanceRecords(newMap);
+                                }} disabled={!attendanceBatch || batchStudents.length === 0} className="text-xs py-1.5 px-3 bg-green-50 text-green-700 font-bold rounded-lg hover:bg-green-100 disabled:opacity-50">All P</button>
+
+                                <button onClick={() => {
+                                    const newMap = { ...attendanceRecords };
+                                    batchStudents.forEach(s => newMap[s.studentId] = 'Absent');
+                                    setAttendanceRecords(newMap);
+                                }} disabled={!attendanceBatch || batchStudents.length === 0} className="text-xs py-1.5 px-3 bg-red-50 text-red-600 font-bold rounded-lg hover:bg-red-100 disabled:opacity-50">All A</button>
+
+                                <button onClick={() => {
+                                    const newMap = { ...attendanceRecords };
+                                    batchStudents.forEach(s => newMap[s.studentId] = 'Holiday');
+                                    setAttendanceRecords(newMap);
+                                }} disabled={!attendanceBatch || batchStudents.length === 0} className="text-xs py-1.5 px-3 bg-yellow-50 text-yellow-700 font-bold rounded-lg hover:bg-yellow-100 disabled:opacity-50 border border-yellow-200 shadow-sm mr-2">All Holiday</button>
+
+                                <button onClick={handleSaveAttendance} disabled={savingAttendance || !attendanceBatch || batchStudents.length === 0} className="btn-primary text-xs py-1.5 px-4 disabled:opacity-60 shadow-md">
+                                    {savingAttendance ? 'Saving...' : 'Save Attendance'}
+                                </button>
+                            </div>
                         </div>
                         <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4 flex gap-4">
                             <div className="flex-1">
@@ -708,9 +730,10 @@ export default function DirectorDashboard() {
                                                 <tr key={s.studentId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
                                                     <td className="py-2.5 px-4"><div className="font-medium text-gray-800">{s.name}</div><div className="text-[10px] text-gray-400">{s.studentId}</div></td>
                                                     <td className="py-2.5 px-4 text-center">
-                                                        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white">
-                                                            <button onClick={() => setAttendanceRecords(p => ({ ...p, [s.studentId]: 'Present' }))} className={`px-3 py-1 text-xs font-semibold ${attendanceRecords[s.studentId] === 'Present' ? 'bg-[#D1FAE5] text-[#059669]' : 'text-gray-500 hover:bg-gray-50'}`}>Present</button>
-                                                            <button onClick={() => setAttendanceRecords(p => ({ ...p, [s.studentId]: 'Absent' }))} className={`px-3 py-1 text-xs font-semibold border-l border-gray-200 ${attendanceRecords[s.studentId] === 'Absent' ? 'bg-[#FEE2E2] text-[#DC2626]' : 'text-gray-500 hover:bg-gray-50'}`}>Absent</button>
+                                                        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+                                                            <button onClick={() => setAttendanceRecords(p => ({ ...p, [s.studentId]: 'Present' }))} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${attendanceRecords[s.studentId] === 'Present' ? 'bg-[#D1FAE5] text-[#059669]' : 'text-gray-500 hover:bg-gray-50'}`}>Present</button>
+                                                            <button onClick={() => setAttendanceRecords(p => ({ ...p, [s.studentId]: 'Absent' }))} className={`px-4 py-1.5 text-xs font-semibold border-l border-gray-200 transition-colors ${attendanceRecords[s.studentId] === 'Absent' ? 'bg-[#FEE2E2] text-[#DC2626]' : 'text-gray-500 hover:bg-gray-50'}`}>Absent</button>
+                                                            <button onClick={() => setAttendanceRecords(p => ({ ...p, [s.studentId]: 'Holiday' }))} className={`px-4 py-1.5 text-xs font-semibold border-l border-gray-200 transition-colors ${attendanceRecords[s.studentId] === 'Holiday' ? 'bg-yellow-100 text-yellow-700' : 'text-gray-500 hover:bg-gray-50'}`}>Holiday</button>
                                                         </div>
                                                     </td>
                                                 </tr>

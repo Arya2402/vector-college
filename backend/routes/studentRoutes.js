@@ -5,6 +5,8 @@ const StudentProfile = require('../models/StudentProfile');
 const Marks = require('../models/Marks');
 const Attendance = require('../models/Attendance');
 const Test = require('../models/Test');
+const TestAttempt = require('../models/TestAttempt');
+const OnlineTest = require('../models/OnlineTest');
 
 // All routes require student role
 router.use(protect, authorize('student'));
@@ -17,6 +19,7 @@ router.get('/dashboard', async (req, res) => {
         if (!profile) return res.status(404).json({ message: 'Student profile not found' });
 
         const marks = await Marks.find({ studentId }).populate('testId');
+        const attempts = await TestAttempt.find({ studentId, status: { $in: ['submitted', 'auto-submitted-violation'] } }).populate('onlineTestId');
         const attendance = await Attendance.find({ studentId }).sort({ date: -1 });
         const upcomingTests = await Test.find({
             batch: profile.batch,
@@ -31,6 +34,8 @@ router.get('/dashboard', async (req, res) => {
 
         // Group marks by test and calc percentage per test
         const testMap = {};
+
+        // Add offline marks
         marks.forEach(m => {
             if (!m.testId) return;
             const tid = m.testId._id.toString();
@@ -41,10 +46,32 @@ router.get('/dashboard', async (req, res) => {
                     date: m.testId.date,
                     totalObtained: 0,
                     totalMax: 0,
+                    type: 'offline'
                 };
             }
             testMap[tid].totalObtained += m.marksObtained;
             testMap[tid].totalMax += m.totalMarks;
+        });
+
+        // Add CBT attempts
+        attempts.forEach(a => {
+            if (!a.onlineTestId) return;
+            // Only consider the best attempt or latest attempt
+            const tid = a.onlineTestId._id.toString();
+
+            // Calculate max marks possible for this CBT test
+            const totalMax = a.onlineTestId.questions.reduce((sum, q) => sum + (q.positiveMarks || 4), 0);
+
+            if (!testMap[tid] || a.score.totalMarks > testMap[tid].totalObtained) {
+                testMap[tid] = {
+                    testId: tid,
+                    testName: a.onlineTestId.title,
+                    date: a.endTime || a.updatedAt || a.startTime,
+                    totalObtained: a.score.totalMarks,
+                    totalMax: totalMax,
+                    type: 'cbt'
+                };
+            }
         });
 
         const testResults = Object.values(testMap).map(t => ({
@@ -60,10 +87,10 @@ router.get('/dashboard', async (req, res) => {
         // Latest test result
         const latestTestResult = testResults.sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
 
-        // Calculate rank in latest published test
+        // Calculate rank in latest published test (Offline only for now)
         let latestRank = null;
         let latestTotalStudents = 0;
-        if (latestTestResult) {
+        if (latestTestResult && latestTestResult.type === 'offline') {
             const allMarks = await Marks.find({ testId: latestTestResult.testId });
             const studentTotals = {};
             allMarks.forEach(m => {
@@ -73,9 +100,21 @@ router.get('/dashboard', async (req, res) => {
             const sorted = Object.entries(studentTotals).sort((a, b) => b[1] - a[1]);
             latestRank = sorted.findIndex(([id]) => parseInt(id) === studentId) + 1;
             latestTotalStudents = sorted.length;
+        } else if (latestTestResult && latestTestResult.type === 'cbt') {
+            const allAttempts = await TestAttempt.find({ onlineTestId: latestTestResult.testId });
+            const studentTotals = {};
+            allAttempts.forEach(a => {
+                const sId = a.studentId;
+                if (!studentTotals[sId] || a.score.totalMarks > studentTotals[sId]) {
+                    studentTotals[sId] = a.score.totalMarks;
+                }
+            });
+            const sorted = Object.entries(studentTotals).sort((a, b) => b[1] - a[1]);
+            latestRank = sorted.findIndex(([id]) => parseInt(id) === studentId) + 1;
+            latestTotalStudents = sorted.length;
         }
 
-        // Subject-wise averages and accuracy
+        // Subject-wise averages and accuracy (Offline)
         const subjectMap = {};
         marks.forEach(m => {
             if (!subjectMap[m.subject]) subjectMap[m.subject] = { total: 0, max: 0, count: 0, correct: 0, wrong: 0, unattempted: 0 };
@@ -86,6 +125,53 @@ router.get('/dashboard', async (req, res) => {
             subjectMap[m.subject].unattempted += (m.unattempted || 0);
             subjectMap[m.subject].count++;
         });
+
+        // Add CBT subject scores
+        attempts.forEach(a => {
+            if (!a.onlineTestId || !a.onlineTestId.questions) return;
+
+            // Map individual question marks by subject
+            const subData = {};
+            a.onlineTestId.questions.forEach(q => {
+                const sub = q.subject || 'General';
+                if (!subData[sub]) subData[sub] = { total: 0, max: 0, correct: 0, wrong: 0, unattempted: 0 };
+                subData[sub].max += (q.positiveMarks || 4);
+            });
+
+            a.answers.forEach(ans => {
+                const q = a.onlineTestId.questions.find(qx => qx._id.toString() === ans.questionId.toString());
+                if (!q) return;
+                const sub = q.subject || 'General';
+
+                let isCorrect = false;
+                if (q.type === 'Numerical' && ans.numericalAnswer !== undefined && ans.numericalAnswer !== null) {
+                    isCorrect = Math.abs(ans.numericalAnswer - q.correctNumericalAnswer) < 0.001;
+                } else if ((!q.type || q.type === 'MCQ') && ans.selectedOptionIndex !== undefined) {
+                    isCorrect = ans.selectedOptionIndex === q.correctOptionIndex;
+                }
+
+                if (isCorrect) {
+                    subData[sub].total += (q.positiveMarks || 4);
+                    subData[sub].correct++;
+                } else if (ans.selectedOptionIndex !== undefined || (ans.numericalAnswer !== undefined && ans.numericalAnswer !== null)) {
+                    subData[sub].total -= (q.negativeMarks || 1);
+                    subData[sub].wrong++;
+                } else {
+                    subData[sub].unattempted++;
+                }
+            });
+
+            Object.keys(subData).forEach(sub => {
+                if (!subjectMap[sub]) subjectMap[sub] = { total: 0, max: 0, count: 0, correct: 0, wrong: 0, unattempted: 0 };
+                subjectMap[sub].total += subData[sub].total;
+                subjectMap[sub].max += subData[sub].max;
+                subjectMap[sub].correct += subData[sub].correct;
+                subjectMap[sub].wrong += subData[sub].wrong;
+                subjectMap[sub].unattempted += subData[sub].unattempted;
+                subjectMap[sub].count++; // We treat one CBT attempt as 1 entry per subject
+            });
+        });
+
         const subjectAverages = Object.entries(subjectMap).map(([subject, data]) => {
             const sumAttempts = data.correct + data.wrong;
             return {
@@ -119,9 +205,12 @@ router.get('/marks', async (req, res) => {
     try {
         const studentId = req.user.userId;
         const marks = await Marks.find({ studentId }).populate('testId');
+        const attempts = await TestAttempt.find({ studentId, status: { $in: ['submitted', 'auto-submitted-violation'] } }).populate('onlineTestId');
 
         // Group by test
         const testMap = {};
+
+        // Process Offline Marks
         marks.forEach(m => {
             if (!m.testId || !m.testId.isPublished) return;
             const tid = m.testId._id.toString();
@@ -131,6 +220,7 @@ router.get('/marks', async (req, res) => {
                     testName: m.testId.testName,
                     date: m.testId.date,
                     batch: m.testId.batch,
+                    type: 'offline',
                     subjects: [],
                     totalObtained: 0,
                     totalMax: 0,
@@ -143,6 +233,59 @@ router.get('/marks', async (req, res) => {
             });
             testMap[tid].totalObtained += m.marksObtained;
             testMap[tid].totalMax += m.totalMarks;
+        });
+
+        // Process CBT Attempts
+        attempts.forEach(a => {
+            if (!a.onlineTestId || !a.onlineTestId.questions) return;
+            const tid = a.onlineTestId._id.toString();
+
+            // Re-calculate subject-wise arrays
+            const subData = {};
+            a.onlineTestId.questions.forEach(q => {
+                const sub = q.subject || 'General';
+                if (!subData[sub]) subData[sub] = { total: 0, max: 0 };
+                subData[sub].max += (q.positiveMarks || 4);
+            });
+
+            a.answers.forEach(ans => {
+                const q = a.onlineTestId.questions.find(qx => qx._id.toString() === ans.questionId.toString());
+                if (!q) return;
+                const sub = q.subject || 'General';
+
+                let isCorrect = false;
+                if (q.type === 'Numerical' && ans.numericalAnswer !== undefined && ans.numericalAnswer !== null) {
+                    isCorrect = Math.abs(ans.numericalAnswer - q.correctNumericalAnswer) < 0.001;
+                } else if ((!q.type || q.type === 'MCQ') && ans.selectedOptionIndex !== undefined) {
+                    isCorrect = ans.selectedOptionIndex === q.correctOptionIndex;
+                }
+
+                if (isCorrect) {
+                    subData[sub].total += (q.positiveMarks || 4);
+                } else if (ans.selectedOptionIndex !== undefined || (ans.numericalAnswer !== undefined && ans.numericalAnswer !== null)) {
+                    subData[sub].total -= (q.negativeMarks || 1);
+                }
+            });
+
+            // If multiple attempts exist, only replace if score is higher
+            const maxSubOverall = Object.values(subData).reduce((sum, d) => sum + d.max, 0);
+
+            if (!testMap[tid] || a.score.totalMarks > testMap[tid].totalObtained) {
+                testMap[tid] = {
+                    testId: tid,
+                    testName: a.onlineTestId.title,
+                    date: a.endTime || a.updatedAt || a.startTime,
+                    batch: a.onlineTestId.batch,
+                    type: 'cbt',
+                    subjects: Object.keys(subData).map(sub => ({
+                        subject: sub,
+                        marksObtained: subData[sub].total,
+                        totalMarks: subData[sub].max
+                    })),
+                    totalObtained: a.score.totalMarks,
+                    totalMax: maxSubOverall,
+                };
+            }
         });
 
         const results = Object.values(testMap).map(t => ({
