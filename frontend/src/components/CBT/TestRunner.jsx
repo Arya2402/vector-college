@@ -20,6 +20,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     // Add ref for the test container to make fullscreen more robust against random clicks
     const containerRef = React.useRef(null);
 
+    // Definitions First
     const formatSubmitAnswers = useCallback(() => {
         return Object.entries(answers).map(([questionId, data]) => ({
             questionId,
@@ -71,7 +72,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         }
     }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
 
-    // Initial Load
+    // Effects Next
     useEffect(() => {
         api.fetchOnlineTestDetail(testId).then(res => {
             setTest(res.data);
@@ -93,7 +94,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         });
     }, [testId, attemptData.startTime, onFinish]);
 
-    // Timer logic
     useEffect(() => {
         if (loading || timeLeft <= 0 || submitting || isViolation) return;
         const timer = setInterval(() => {
@@ -109,7 +109,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         return () => clearInterval(timer);
     }, [loading, timeLeft, submitting, isViolation, handleSubmit]);
 
-    // Fullscreen Listeners
     useEffect(() => {
         const handleFsChange = () => {
             const isActive = !!document.fullscreenElement;
