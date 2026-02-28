@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from '../../api';
 import toast from 'react-hot-toast';
 import { FiClock, FiAlertTriangle, FiCheck, FiChevronRight, FiFlag } from 'react-icons/fi';
@@ -17,10 +17,13 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     const [isViolation, setIsViolation] = useState(false);
     const [isFullscreenActive, setIsFullscreenActive] = useState(true);
 
-    // Add ref for the test container to make fullscreen more robust against random clicks
-    const containerRef = React.useRef(null);
+    // Ref for the test container 
+    const containerRef = useRef(null);
 
-    // Definitions First
+    // -----------------------------------------------------------------
+    // HANDLERS (Defined first for ESLint)
+    // -----------------------------------------------------------------
+
     const formatSubmitAnswers = useCallback(() => {
         return Object.entries(answers).map(([questionId, data]) => ({
             questionId,
@@ -48,14 +51,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         }
     }, [attemptData._id, formatSubmitAnswers, fullscreenWarnings, onFinish]);
 
-    const enterFullscreen = useCallback(() => {
-        if (containerRef.current) {
-            containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
-                document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
-            });
-        }
-    }, []);
-
     const handleFullscreenExit = useCallback(async () => {
         if (submitting || isViolation) return;
 
@@ -72,7 +67,19 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         }
     }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
 
-    // Effects Next
+    const enterFullscreen = useCallback(() => {
+        if (containerRef.current) {
+            containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
+                document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
+            });
+        }
+    }, []);
+
+    // -----------------------------------------------------------------
+    // EFFECTS
+    // -----------------------------------------------------------------
+
+    // Initial Load
     useEffect(() => {
         api.fetchOnlineTestDetail(testId).then(res => {
             setTest(res.data);
@@ -94,6 +101,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         });
     }, [testId, attemptData.startTime, onFinish]);
 
+    // Timer logic
     useEffect(() => {
         if (loading || timeLeft <= 0 || submitting || isViolation) return;
         const timer = setInterval(() => {
@@ -109,8 +117,9 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         return () => clearInterval(timer);
     }, [loading, timeLeft, submitting, isViolation, handleSubmit]);
 
+    // Listeners
     useEffect(() => {
-        const handleFsChange = () => {
+        const onFsChange = () => {
             const isActive = !!document.fullscreenElement;
             setIsFullscreenActive(isActive);
             if (!isActive && !submitting && !isViolation) {
@@ -118,21 +127,23 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             }
         };
 
-        const handleVisibilityChange = () => {
+        const onVisChange = () => {
             if (document.hidden && !submitting && !isViolation) {
                 handleFullscreenExit();
             }
         };
 
-        document.addEventListener('fullscreenchange', handleFsChange);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('fullscreenchange', onFsChange);
+        document.addEventListener('visibilitychange', onVisChange);
         return () => {
-            document.removeEventListener('fullscreenchange', handleFsChange);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('fullscreenchange', onFsChange);
+            document.removeEventListener('visibilitychange', onVisChange);
         };
     }, [handleFullscreenExit, submitting, isViolation]);
 
-
+    // -----------------------------------------------------------------
+    // UTILS
+    // -----------------------------------------------------------------
 
     const handleSelectOption = (questionId, optionIndex) => {
         setAnswers(prev => ({
@@ -155,17 +166,14 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     const updateStatusAndNavigate = (newStatus) => {
         const qId = test.questions[currentIndex]._id;
-
         let finalStatus = newStatus;
         if (newStatus === 'save') {
             finalStatus = isQuestionAnswered(qId) ? 'answered' : 'visited';
         }
-
         setAnswers(prev => ({
             ...prev,
             [qId]: { ...prev[qId], status: finalStatus }
         }));
-
         if (currentIndex < test.questions.length - 1) {
             navigateQuestion(currentIndex + 1);
         }
@@ -173,8 +181,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     const navigateQuestion = (idx) => {
         if (idx < 0 || idx >= test.questions.length) return;
-
-        // Mark current as visited if it has no status
         const currentQId = test.questions[currentIndex]._id;
         if (!answers[currentQId]?.status) {
             setAnswers(prev => ({
@@ -182,13 +188,11 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
                 [currentQId]: { ...prev[currentQId], status: 'visited' }
             }));
         }
-
         const nextQId = test.questions[idx]._id;
         setAnswers(prev => ({
             ...prev,
             [nextQId]: { ...prev[nextQId], status: prev[nextQId]?.status || 'visited' }
         }));
-
         setCurrentIndex(idx);
     };
 
@@ -217,7 +221,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     const currentQuestion = test.questions[currentIndex];
 
-    // Stats
     let countAnswered = 0;
     let countReviewed = 0;
     let countVisited = 0;
@@ -240,25 +243,15 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     return (
         <div ref={containerRef} className="fixed inset-0 bg-[#F4F6FF] z-50 flex flex-col overflow-hidden">
-            {/* Fullscreen Overlay */}
             {!isFullscreenActive && !submitting && !isViolation && (
-                <div className="fixed inset-0 z-[100] bg-white/80 backdrop-blur-md flex flex-center flex-col items-center justify-center p-6 text-center">
+                <div className="fixed inset-0 z-[100] bg-white/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
                     <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border-4 border-amber-100 animate-pulse text-amber-600">
                         <FiAlertTriangle size={40} />
                     </div>
                     <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">Fullscreen Required</h2>
                     <p className="text-gray-600 max-w-sm mb-8 leading-relaxed font-medium">To maintain test integrity, you must remain in fullscreen mode. Please click the button below to continue your exam.</p>
-                    <button
-                        onClick={enterFullscreen}
-                        className="btn-primary px-10 py-4 text-lg font-bold shadow-xl active:scale-95 transition-transform"
-                    >
-                        Enter Fullscreen Mode
-                    </button>
-                    {fullscreenWarnings > 0 && (
-                        <p className="mt-8 text-sm font-bold text-red-500 uppercase tracking-widest bg-red-50 px-4 py-2 rounded-full border border-red-100">
-                            Warning {fullscreenWarnings} of 5
-                        </p>
-                    )}
+                    <button onClick={enterFullscreen} className="btn-primary px-10 py-4 text-lg font-bold shadow-xl">Enter Fullscreen Mode</button>
+                    {fullscreenWarnings > 0 && <p className="mt-8 text-sm font-bold text-red-500 uppercase">Warning {fullscreenWarnings} of 5</p>}
                 </div>
             )}
 
@@ -268,7 +261,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
                     <p className="text-xs text-gray-500 font-medium">Batch {test.batch}</p>
                 </div>
                 <div className="flex gap-4 items-center">
-                    {fullscreenWarnings > 0 && <div className="flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-bold animate-pulse"><FiAlertTriangle /> {fullscreenWarnings}/5 Warnings</div>}
+                    {fullscreenWarnings > 0 && <div className="flex items-center gap-1 text-red-600 bg-red-50 px-3 py-1 rounded-full text-xs font-bold"><FiAlertTriangle /> {fullscreenWarnings}/5 Warnings</div>}
                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-4 py-2 rounded-xl text-gray-800 font-mono font-bold text-lg tabular-nums">
                         <FiClock className={timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-gray-400'} />
                         <span className={timeLeft < 300 ? 'text-red-500' : ''}>{formatTime(timeLeft)}</span>
@@ -277,127 +270,84 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             </header>
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Main Question Area */}
                 <main className="flex-1 flex flex-col overflow-hidden">
-                    {/* Question Header */}
                     <div className="bg-white px-6 py-4 flex justify-between items-center border-b border-gray-200 shrink-0">
                         <div className="flex items-center gap-3">
                             <span className="text-lg font-bold text-[#27548A]">Question {currentIndex + 1}</span>
                             <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold border border-blue-100">{currentQuestion.subject || 'General'}</span>
                         </div>
                         <div className="flex items-center gap-4 text-sm font-semibold">
-                            <span className="text-green-600 bg-green-50 px-2 py-1 rounded border border-green-100">+{currentQuestion.positiveMarks} Marks</span>
-                            <span className="text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100">-{currentQuestion.negativeMarks} Marks</span>
+                            <span className="text-green-600">+{currentQuestion.positiveMarks} Marks</span>
+                            <span className="text-red-600">-{currentQuestion.negativeMarks} Marks</span>
                         </div>
                     </div>
 
-                    {/* Question Content */}
-                    <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                    <div className="flex-1 overflow-y-auto p-6">
                         <div className="max-w-4xl mx-auto space-y-6">
                             <div className="text-base text-gray-800 leading-relaxed font-medium bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <MathRenderer content={currentQuestion.text} />
                             </div>
-
-                            {currentQuestion.imageUrl && <div className="my-4"><img src={currentQuestion.imageUrl} alt="Graphic" className="max-w-full rounded-xl border border-gray-100 shadow-sm" style={{ maxHeight: '400px' }} /></div>}
-
+                            {currentQuestion.imageUrl && <div className="my-4 text-center"><img src={currentQuestion.imageUrl} alt="Graphic" className="max-w-full rounded-xl shadow-sm" style={{ maxHeight: '400px' }} /></div>}
                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 {currentQuestion.type === 'Numerical' ? (
                                     <div>
-                                        <label className="block text-sm font-bold tracking-wide text-gray-600 uppercase mb-3">Your Answer (Numerical)</label>
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={answers[currentQuestion._id]?.numericalAnswer || ''}
-                                            onChange={e => handleInputNumerical(currentQuestion._id, e.target.value)}
-                                            className="w-full max-w-sm border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-semibold focus:outline-none focus:border-[#27548A]"
-                                            placeholder="Enter numerical value..."
-                                        />
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-3 text-center">Your Answer (Numerical)</label>
+                                        <div className="flex justify-center">
+                                            <input type="number" step="any" value={answers[currentQuestion._id]?.numericalAnswer || ''} onChange={e => handleInputNumerical(currentQuestion._id, e.target.value)} className="w-full max-w-sm border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-semibold text-center focus:border-[#27548A]" placeholder="Enter value..." />
+                                        </div>
                                     </div>
                                 ) : (
-                                    <div>
-                                        <label className="block text-sm font-bold tracking-wide text-gray-600 uppercase mb-3">Options</label>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {currentQuestion.options.map((opt, oIdx) => {
-                                                const isSelected = answers[currentQuestion._id]?.selectedOptionIndex === oIdx;
-                                                return (
-                                                    <label key={oIdx} className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${isSelected ? 'border-[#27548A] bg-blue-50/50' : 'border-gray-100 hover:border-[#27548A]/30 hover:bg-gray-50'}`}>
-                                                        <div className="relative flex items-center justify-center shrink-0">
-                                                            <input type="radio" name="opt" checked={isSelected} onChange={() => handleSelectOption(currentQuestion._id, oIdx)} className="peer w-5 h-5 opacity-0 absolute cursor-pointer" />
-                                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-[#27548A] bg-[#27548A]' : 'border-gray-300'}`}>
-                                                                {isSelected && <div className="w-2 h-2 rounded-full bg-white"></div>}
-                                                            </div>
-                                                        </div>
-                                                        <span className="ml-3 text-sm text-gray-800 font-medium">
-                                                            <MathRenderer content={opt} />
-                                                        </span>
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {currentQuestion.options.map((opt, oIdx) => {
+                                            const isSelected = answers[currentQuestion._id]?.selectedOptionIndex === oIdx;
+                                            return (
+                                                <label key={oIdx} className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${isSelected ? 'border-[#27548A] bg-blue-50' : 'border-gray-100 hover:border-[#27548A]/30'}`}>
+                                                    <input type="radio" name="opt" checked={isSelected} onChange={() => handleSelectOption(currentQuestion._id, oIdx)} className="w-5 h-5 accent-[#27548A]" />
+                                                    <span className="ml-3 text-sm text-gray-800 font-medium"><MathRenderer content={opt} /></span>
+                                                </label>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Bottom Action Bar */}
-                    <div className="bg-white border-t border-gray-200 p-4 shrink-0 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                    <div className="bg-white border-t border-gray-200 p-4 shrink-0 flex justify-between items-center px-6">
                         <div className="flex gap-3">
-                            <button onClick={() => updateStatusAndNavigate('reviewed')} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 flex items-center gap-2 transition-colors">
-                                <FiFlag /> Mark for Review & Next
-                            </button>
-                            <button onClick={handleClearResponse} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors">
-                                Clear Response
-                            </button>
+                            <button onClick={() => updateStatusAndNavigate('reviewed')} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-2"><FiFlag /> Mark for Review</button>
+                            <button onClick={handleClearResponse} className="px-5 py-2.5 rounded-lg font-bold text-sm bg-gray-50 text-gray-600 border border-gray-200">Clear</button>
                         </div>
-                        <button onClick={() => updateStatusAndNavigate('save')} className="px-8 py-2.5 rounded-lg font-bold text-sm bg-[#27548A] text-white hover:bg-[#1f426d] shadow-md flex items-center gap-2 transition-transform active:scale-95">
-                            Save & Next <FiChevronRight />
-                        </button>
+                        <button onClick={() => updateStatusAndNavigate('save')} className="px-8 py-2.5 rounded-lg font-bold text-sm bg-[#27548A] text-white flex items-center gap-2">Save & Next <FiChevronRight /></button>
                     </div>
                 </main>
 
-                {/* Right Sidebar - Palette */}
-                <aside className="w-[320px] bg-white border-l border-gray-200 flex flex-col shrink-0 shadow-[-4px_0_6px_-1px_rgba(0,0,0,0.02)] z-10">
-                    {/* User & Timer Panel */}
-                    <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex flex-col gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg shrink-0">👤</div>
-                            <div className="leading-tight">
-                                <div className="text-sm font-bold text-gray-900 line-clamp-1">Batch {attemptData.studentId}</div>
-                                <div className="text-xs text-gray-500 font-semibold">{test.questions.length} Questions</div>
-                            </div>
+                <aside className="w-[320px] bg-white border-l border-gray-200 flex flex-col shrink-0 z-10">
+                    <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg">👤</div>
+                        <div className="leading-tight">
+                            <div className="text-sm font-bold text-gray-900 line-clamp-1">Batch {attemptData.studentId}</div>
+                            <div className="text-xs text-gray-500 font-semibold">{test?.questions?.length || 0} Questions</div>
                         </div>
                     </div>
 
-                    {/* Status Legends */}
-                    <div className="p-4 border-b border-gray-100 grid grid-cols-2 gap-y-3 gap-x-2 text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-green-500 border border-green-600 flex items-center justify-center text-white">{countAnswered}</div> Answered</div>
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-red-500 border border-red-600 flex items-center justify-center text-white">{countVisited}</div> Not Answered</div>
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-white border border-gray-300 flex items-center justify-center text-gray-400">{countUnvisited}</div> Not Visited</div>
-                        <div className="flex items-center gap-2"><div className="w-5 h-5 rounded bg-purple-500 border border-purple-600 flex items-center justify-center text-white">{countReviewed}</div> Review</div>
+                    <div className="p-4 border-b border-gray-100 grid grid-cols-2 gap-y-3 gap-x-2 text-[10px] font-bold text-gray-600 uppercase">
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-green-500" /> Answered ({countAnswered})</div>
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-500" /> Not Answered ({countVisited})</div>
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-white border border-gray-300" /> Not Visited ({countUnvisited})</div>
+                        <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-purple-500" /> Review ({countReviewed})</div>
                     </div>
 
-                    {/* Question Palette Grid */}
                     <div className="flex-1 overflow-y-auto p-4 bg-gray-50/30">
-                        <h3 className="font-bold text-sm text-gray-800 mb-3">Question Palette</h3>
                         <div className="grid grid-cols-5 gap-2">
-                            {test.questions.map((q, qIdx) => (
-                                <button
-                                    key={q._id}
-                                    onClick={() => navigateQuestion(qIdx)}
-                                    className={`relative flex items-center justify-center h-10 text-sm font-bold rounded-lg border-2 transition-all ${getPaletteColor(q._id)} ${currentIndex === qIdx ? 'ring-2 ring-blue-400 ring-offset-1 scale-105' : 'hover:opacity-80'}`}
-                                >
-                                    {qIdx + 1}
-                                </button>
+                            {test?.questions?.map((q, qIdx) => (
+                                <button key={q._id} onClick={() => navigateQuestion(qIdx)} className={`h-10 text-sm font-bold rounded-lg border-2 transition-all ${getPaletteColor(q._id)} ${currentIndex === qIdx ? 'ring-2 ring-blue-400' : ''}`}>{qIdx + 1}</button>
                             ))}
                         </div>
                     </div>
 
-                    {/* Submit Button */}
-                    <div className="p-5 border-t border-gray-200 bg-white">
-                        <button onClick={() => handleSubmit(false)} disabled={submitting} className="w-full btn-primary py-3.5 text-[15px] font-bold uppercase tracking-widest flex justify-center items-center gap-2 shadow-lg">
-                            <FiCheck size={18} /> {submitting ? 'Submitting...' : 'Submit Test'}
-                        </button>
+                    <div className="p-5 border-t border-gray-200">
+                        <button onClick={() => handleSubmit(false)} disabled={submitting} className="w-full btn-primary py-3.5 text-sm font-bold uppercase tracking-widest flex justify-center items-center gap-2 shadow-lg"><FiCheck /> {submitting ? 'Submitting...' : 'Submit Test'}</button>
                     </div>
                 </aside>
             </div>
