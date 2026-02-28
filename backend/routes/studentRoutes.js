@@ -391,7 +391,19 @@ router.get('/tests/:testId', async (req, res) => {
                 if (!q) return;
                 const sub = q.subject || 'General';
 
-                if (ans.isCorrect) {
+                // Robust verification of correctness (backup for old data)
+                let answerIsCorrect = ans.isCorrect;
+                if (answerIsCorrect === undefined || answerIsCorrect === null) {
+                    if (q.type === 'Numerical' && ans.numericalAnswer != null) {
+                        answerIsCorrect = Math.abs(Number(ans.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001;
+                    } else if (ans.selectedOptionIndex != null) {
+                        answerIsCorrect = parseInt(ans.selectedOptionIndex) === q.correctOptionIndex;
+                    } else {
+                        answerIsCorrect = false;
+                    }
+                }
+
+                if (answerIsCorrect) {
                     subjectsMap[sub].correctAnswers++;
                     subjectsMap[sub].marksObtained += (q.positiveMarks || 4);
                 } else if (ans.selectedOptionIndex != null || ans.numericalAnswer != null) {
@@ -442,6 +454,7 @@ router.get('/tests/:testId', async (req, res) => {
                     type: 'cbt',
                     positiveMarks: test.questions[0]?.positiveMarks || 4,
                     negativeMarks: test.questions[0]?.negativeMarks || 1,
+                    questions: test.questions, // Include questions for review
                 },
                 subjects: Object.values(subjectsMap),
                 myTotal: myAttempt.score.totalMarks,
@@ -450,6 +463,7 @@ router.get('/tests/:testId', async (req, res) => {
                 myRank,
                 totalStudents: rankings.length,
                 rankings,
+                answers: myAttempt.answers, // Include student answers for review
                 attemptId: myAttempt._id
             });
         }

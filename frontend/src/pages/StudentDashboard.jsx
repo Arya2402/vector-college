@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiArrowLeft, FiChevronRight, FiMonitor, FiClock } from 'react-icons/fi';
+import { FiLogOut, FiHome, FiBarChart2, FiCalendar, FiCheckSquare, FiAward, FiArrowLeft, FiChevronRight, FiMonitor, FiClock, FiCheck, FiX, FiAlertCircle } from 'react-icons/fi';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { fetchStudentDashboard, fetchStudentMarks, fetchStudentAttendance, fetchStudentTests, fetchStudentTestDetail, fetchOnlineTests, startOnlineTest } from '../api';
 import TestRunner from '../components/CBT/TestRunner';
+import { MathRenderer } from '../components/CBT/MathRenderer';
 
 function StatCard({ icon: Icon, label, value, color, sub }) {
     return (
@@ -230,7 +231,7 @@ function TestDetailView({ testId, onBack }) {
             {rankings && rankings.length > 0 && (
                 <>
                     <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">🏆 Test Rankings</h3>
-                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">
+                    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-8">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
@@ -268,6 +269,94 @@ function TestDetailView({ testId, onBack }) {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </>
+            )}
+
+            {/* Detailed Question Review (CBT only) */}
+            {test.type === 'cbt' && test.questions && (
+                <>
+                    <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">📝 Detailed Question Review</h3>
+                    <div className="space-y-4 mb-20">
+                        {test.questions.map((q, idx) => {
+                            const studentAns = data.answers?.find(a => a.questionId === q._id);
+
+                            let isCorrect = studentAns?.isCorrect;
+                            if (isCorrect === undefined || isCorrect === null) {
+                                if (q.type === 'Numerical') {
+                                    isCorrect = studentAns?.numericalAnswer != null && Math.abs(Number(studentAns.numericalAnswer) - Number(q.correctNumericalAnswer)) < 0.001;
+                                } else {
+                                    isCorrect = studentAns?.selectedOptionIndex != null && studentAns.selectedOptionIndex === q.correctOptionIndex;
+                                }
+                            }
+                            const isSkipped = (studentAns?.selectedOptionIndex === undefined || studentAns?.selectedOptionIndex === null) &&
+                                (studentAns?.numericalAnswer === undefined || studentAns?.numericalAnswer === null);
+
+                            return (
+                                <div key={q._id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                                    <div className="bg-gray-50/50 px-5 py-3 border-b border-gray-50 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-gray-400 bg-white border border-gray-200 w-6 h-6 rounded-lg flex items-center justify-center">Q{idx + 1}</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 py-0.5 bg-gray-100 rounded-md">{q.subject}</span>
+                                        </div>
+                                        <div className="text-[10px] font-bold">
+                                            {isCorrect ? (
+                                                <span className="text-green-600 flex items-center gap-1"><FiCheck /> Correct (+{q.positiveMarks || 4})</span>
+                                            ) : isSkipped ? (
+                                                <span className="text-gray-400 flex items-center gap-1"><FiAlertCircle /> Unattempted (0)</span>
+                                            ) : (
+                                                <span className="text-red-600 flex items-center gap-1"><FiX /> Wrong (-{q.negativeMarks || 1})</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="p-5">
+                                        <div className="text-gray-900 font-medium leading-relaxed mb-4">
+                                            <MathRenderer content={q.text} />
+                                        </div>
+
+                                        {q.imageUrl && (
+                                            <div className="mb-4">
+                                                <img src={q.imageUrl} alt="Question" className="max-h-48 rounded-xl border border-gray-100 shadow-sm" />
+                                            </div>
+                                        )}
+
+                                        {q.type === 'Numerical' ? (
+                                            <div className="flex gap-4">
+                                                <div className="flex-1 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                                    <div className="text-[9px] uppercase font-bold text-gray-400 mb-0.5">Your Answer</div>
+                                                    <div className={`font-mono font-bold ${isCorrect ? 'text-green-600' : 'text-red-500'}`}>{studentAns?.numericalAnswer ?? 'N/A'}</div>
+                                                </div>
+                                                <div className="flex-1 p-3 rounded-xl bg-green-50 border border-green-100">
+                                                    <div className="text-[9px] uppercase font-bold text-green-600/60 mb-0.5">Correct Answer</div>
+                                                    <div className="font-mono font-bold text-green-700">{q.correctNumericalAnswer}</div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                                {q.options.map((opt, oIdx) => {
+                                                    const isSelected = studentAns?.selectedOptionIndex === oIdx;
+                                                    const isCorrectOpt = q.correctOptionIndex === oIdx;
+
+                                                    let style = 'bg-white border-gray-100 text-gray-600';
+                                                    if (isSelected && isCorrectOpt) style = 'bg-green-500 border-green-600 text-white shadow-sm';
+                                                    else if (isSelected) style = 'bg-red-500 border-red-600 text-white shadow-sm';
+                                                    else if (isCorrectOpt) style = 'bg-green-50 border-green-200 text-green-700';
+
+                                                    return (
+                                                        <div key={oIdx} className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${style}`}>
+                                                            <span className="w-6 h-6 rounded-full bg-black/5 flex items-center justify-center shrink-0 text-xs font-bold uppercase">{String.fromCharCode(65 + oIdx)}</span>
+                                                            <div className="text-xs font-medium"><MathRenderer content={opt} /></div>
+                                                            {isSelected && isCorrectOpt && <FiCheck className="ml-auto" />}
+                                                            {isSelected && !isCorrectOpt && <FiX className="ml-auto" />}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </>
             )}
