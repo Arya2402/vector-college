@@ -3,7 +3,7 @@ import * as api from '../../api';
 import toast from 'react-hot-toast';
 import { FiClock, FiAlertTriangle, FiCheck } from 'react-icons/fi';
 import 'katex/dist/katex.min.css';
-import { InlineMath, BlockMath } from 'react-katex';
+import { InlineMath } from 'react-katex';
 
 export default function TestRunner({ testId, attemptData, onFinish }) {
     const [test, setTest] = useState(null);
@@ -33,6 +33,25 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         });
     }, [testId, attemptData.startTime, onFinish]);
 
+    const handleSubmit = useCallback(async (isTimeUp = false, isViolationSubmit = false) => {
+        if (!isTimeUp && !isViolationSubmit && !window.confirm('Are you sure you want to finally submit your test?')) return;
+        setSubmitting(true);
+        const toastId = toast.loading('Submitting test...');
+
+        try {
+            await api.submitTestAttempt(attemptData._id, {
+                answers,
+                fullscreenExits: fullscreenWarnings,
+                autoSubmitReason: isViolationSubmit ? 'fullscreen_violation' : (isTimeUp ? 'time_up' : null)
+            });
+            toast.success('Test submitted successfully!', { id: toastId });
+            onFinish();
+        } catch (err) {
+            toast.error('Failed to submit test. Try again or contact admin.', { id: toastId });
+            setSubmitting(false);
+        }
+    }, [attemptData._id, answers, fullscreenWarnings, onFinish]);
+
     // Timer logic
     useEffect(() => {
         if (loading || timeLeft <= 0 || submitting || isViolation) return;
@@ -48,7 +67,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             });
         }, 1000);
         return () => clearInterval(timer);
-    }, [loading, timeLeft, submitting, isViolation]);
+    }, [loading, timeLeft, submitting, isViolation, handleSubmit]);
 
     // Fullscreen enforcement and cheat prevention
     const handleFullscreenExit = useCallback(async () => {
@@ -76,7 +95,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
                 }
             }, 3000);
         }
-    }, [fullscreenWarnings, attemptData._id, submitting, isViolation]);
+    }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
 
     useEffect(() => {
         const checkFullscreen = () => {
@@ -130,24 +149,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         return a ? a.selectedOptionIndex : null;
     };
 
-    const handleSubmit = async (isTimeUp = false, isViolationSubmit = false) => {
-        if (!isTimeUp && !isViolationSubmit && !window.confirm('Are you sure you want to finally submit your test?')) return;
-        setSubmitting(true);
-        const toastId = toast.loading('Submitting test...');
 
-        try {
-            await api.submitTestAttempt(attemptData._id, {
-                answers,
-                fullscreenExits: fullscreenWarnings,
-                autoSubmitReason: isViolationSubmit ? 'fullscreen_violation' : (isTimeUp ? 'time_up' : null)
-            });
-            toast.success('Test submitted successfully!', { id: toastId });
-            onFinish();
-        } catch (err) {
-            toast.error('Failed to submit test. Try again or contact admin.', { id: toastId });
-            setSubmitting(false);
-        }
-    };
 
     const formatTime = (secs) => {
         const h = Math.floor(secs / 3600);

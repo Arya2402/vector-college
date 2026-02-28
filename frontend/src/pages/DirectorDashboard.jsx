@@ -1,3 +1,4 @@
+// Force reload to clear Webpack ESLint cache
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';

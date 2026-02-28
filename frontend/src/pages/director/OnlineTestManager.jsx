@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import * as api from '../../api';
 import toast from 'react-hot-toast';
-import { FiPlus, FiTrash2, FiEdit2, FiEye, FiClock, FiVideo, FiImage } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiEdit2, FiClock, FiVideo, FiImage } from 'react-icons/fi';
 import 'katex/dist/katex.min.css';
-import { InlineMath, BlockMath } from 'react-katex';
+import { InlineMath } from 'react-katex';
 
 function Modal({ title, onClose, children, wide }) {
     return (
