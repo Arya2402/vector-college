@@ -343,7 +343,7 @@ function StudentAnalysis({ student, onBack }) {
             {/* Weak subjects alert */}
             {weakSubjects.length > 0 && (
                 <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-4">
-                    <h4 className="font-display font-semibold text-red-700 text-sm mb-2">⚠ Weak Subjects (Below 50%)</h4>
+                    <h4 className="font-display font-semibold text-red-700 text-sm mb-2">Weak Subjects (Below 50%)</h4>
                     <div className="flex flex-wrap gap-2">
                         {weakSubjects.map(s => (
                             <span key={s.subject} className="text-xs bg-white text-red-600 border border-red-200 px-2.5 py-1 rounded-full font-medium">

@@ -47,7 +47,7 @@ function DashboardView({ data }) {
 
             {weakSubjects.length > 0 && (
                 <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-4">
-                    <h4 className="font-display font-semibold text-red-700 text-sm mb-2">⚠ Weak Subjects Needs Attention (Below 50%)</h4>
+                    <h4 className="font-display font-semibold text-red-700 text-sm mb-2">Weak Subjects Needs Attention (Below 50%)</h4>
                     <div className="flex flex-wrap gap-2">
                         {weakSubjects.map(s => (
                             <span key={s.subject} className="text-xs bg-white text-red-600 border border-red-200 px-2.5 py-1 rounded-full font-medium">
@@ -187,9 +187,9 @@ function TestDetailView({ testId, onBack }) {
                                                                 <span className="text-xs text-gray-400">{tTotal} Q · {tAcc}% acc</span>
                                                             </div>
                                                             <div className="flex gap-4 text-xs">
-                                                                <span className="text-green-600 font-medium">✓ {t.correct}</span>
-                                                                <span className="text-red-500 font-medium">✗ {t.wrong}</span>
-                                                                <span className="text-gray-400 font-medium">○ {t.unattempted}</span>
+                                                                <span className="text-green-600 font-medium">{t.correct}</span>
+                                                                <span className="text-red-500 font-medium">{t.wrong}</span>
+                                                                <span className="text-gray-400 font-medium">{t.unattempted}</span>
                                                             </div>
                                                             {/* Progress bar */}
                                                             {tTotal > 0 && (
@@ -230,7 +230,7 @@ function TestDetailView({ testId, onBack }) {
             {/* Rankings Table */}
             {rankings && rankings.length > 0 && (
                 <>
-                    <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">🏆 Test Rankings</h3>
+                    <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">Test Rankings</h3>
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-8">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -276,7 +276,7 @@ function TestDetailView({ testId, onBack }) {
             {/* Detailed Question Review (CBT only) */}
             {test.type === 'cbt' && test.questions && (
                 <>
-                    <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">📝 Detailed Question Review</h3>
+                    <h3 className="font-display font-semibold text-gray-800 text-sm mb-3">Detailed Question Review</h3>
                     <div className="space-y-4 mb-20">
                         {test.questions.map((q, idx) => {
                             const studentAns = data.answers?.find(a => a.questionId === q._id);
@@ -305,7 +305,7 @@ function TestDetailView({ testId, onBack }) {
                                             ) : isSkipped ? (
                                                 <span className="text-gray-400 flex items-center gap-1"><FiAlertCircle /> Unattempted (0)</span>
                                             ) : (
-                                                <span className="text-red-600 flex items-center gap-1"><FiX /> Wrong (-{q.negativeMarks || 1})</span>
+                                                <span className="text-red-600 flex items-center gap-1"><FiX /> (-{q.negativeMarks || 1})</span>
                                             )}
                                         </div>
                                     </div>

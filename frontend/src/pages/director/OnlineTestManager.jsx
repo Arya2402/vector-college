@@ -287,7 +287,7 @@ function AnalysisView({ testId, onBack }) {
                                     <div className="flex-1">
                                         <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                                             Question {idx + 1}
-                                            {isCorrect ? <span className="text-green-600 flex items-center gap-1"><FiCheck /> Correct</span> : isSkipped ? <span className="text-gray-400 flex items-center gap-1"><FiAlertCircle /> Unattempted</span> : <span className="text-red-600 flex items-center gap-1"><FiX /> Wrong</span>}
+                                            {isCorrect ? <span className="text-green-600 flex items-center gap-1"><FiCheck /> Correct</span> : isSkipped ? <span className="text-gray-400 flex items-center gap-1"><FiAlertCircle /> Unattempted</span> : <span className="text-red-600 flex items-center gap-1"><FiX /></span>}
                                         </div>
                                         <div className="text-gray-900 font-medium leading-relaxed">
                                             <MathRenderer content={q.text} />
