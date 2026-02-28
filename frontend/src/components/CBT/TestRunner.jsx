@@ -15,6 +15,7 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
     const [submitting, setSubmitting] = useState(false);
     const [fullscreenWarnings, setFullscreenWarnings] = useState(attemptData?.fullscreenExits || 0);
     const [isViolation, setIsViolation] = useState(false);
+    const [isFullscreenActive, setIsFullscreenActive] = useState(true);
 
     // Add ref for the test container to make fullscreen more robust against random clicks
     const containerRef = React.useRef(null);
@@ -91,6 +92,26 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     // Fullscreen enforcement
     const [isFullscreenLocked, setIsFullscreenLocked] = useState(false);
+
+    const enterFullscreen = useCallback(() => {
+        if (containerRef.current) {
+            containerRef.current.requestFullscreen({ navigationUI: "hide" }).catch(() => {
+                document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => { });
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleFsChange = () => {
+            const isActive = !!document.fullscreenElement;
+            setIsFullscreenActive(isActive);
+            if (!isActive && !submitting && !isViolation) {
+                handleFullscreenExit();
+            }
+        };
+        document.addEventListener('fullscreenchange', handleFsChange);
+        return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    }, [handleFullscreenExit, submitting, isViolation]);
 
     const handleFullscreenExit = useCallback(async () => {
         if (submitting || isViolation) return;
