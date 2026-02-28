@@ -20,6 +20,9 @@ const onlineTestSchema = new mongoose.Schema({
     password: { type: String, required: true },
     durationMinutes: { type: Number, required: true, min: 1 },
     maxAttempts: { type: Number, required: true, default: 1, min: 1 },
+    startTime: { type: Date },
+    endTime: { type: Date },
+    showResults: { type: Boolean, default: false },
     status: { type: String, enum: ['draft', 'active', 'completed'], default: 'draft' },
     createdBy: { type: Number, required: true }, // author (admin/director)
     questions: [questionSchema]

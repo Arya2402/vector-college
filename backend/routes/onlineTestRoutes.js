@@ -126,6 +126,19 @@ router.get('/:id/live', protect, authorize('admin', 'director'), async (req, res
     }
 });
 
+// Toggle results visibility
+router.patch('/:id/toggle-results', protect, authorize('admin', 'director'), async (req, res) => {
+    try {
+        const test = await OnlineTest.findById(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+        test.showResults = !test.showResults;
+        await test.save();
+        res.json(test);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // ---------------------------------------------------------
 // STUDENT TEST EXECUTION
 // ---------------------------------------------------------
@@ -139,6 +152,16 @@ router.post('/:id/start', protect, authorize('student'), async (req, res) => {
         if (!test || test.status !== 'active') {
             return res.status(404).json({ message: 'Test not active or found' });
         }
+
+        // Timing enforcement
+        const now = new Date();
+        if (test.startTime && now < new Date(test.startTime)) {
+            return res.status(403).json({ message: 'Test has not started yet' });
+        }
+        if (test.endTime && now > new Date(test.endTime)) {
+            return res.status(403).json({ message: 'Test has ended' });
+        }
+
         if (test.password && test.password !== password) {
             return res.status(401).json({ message: 'Incorrect test password' });
         }
@@ -255,7 +278,38 @@ router.post('/attempt/:attemptId/submit', protect, authorize('student'), async (
 
         await attempt.save();
         res.json(attempt);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
+// Analysis for Director
+router.get('/:id/analysis', protect, authorize('admin', 'director'), async (req, res) => {
+    try {
+        const test = await OnlineTest.findById(req.params.id);
+        if (!test) return res.status(404).json({ message: 'Test not found' });
+
+        const attempts = await TestAttempt.find({ onlineTestId: req.params.id }).sort({ 'score.totalMarks': -1 });
+
+        // Populate student names
+        const studentIds = attempts.map(a => a.studentId);
+        const profiles = await StudentProfile.find({ studentId: { $in: studentIds } });
+        const profileMap = {};
+        profiles.forEach(p => { profileMap[p.studentId] = p.name; });
+
+        const results = attempts.map(a => ({
+            ...a._doc,
+            studentName: profileMap[a.studentId] || `Student #${a.studentId}`
+        }));
+
+        // Basic stats
+        const summary = {
+            totalAttempts: attempts.length,
+            highScore: attempts.length > 0 ? Math.max(...attempts.map(a => a.score?.totalMarks || 0)) : 0,
+            avgScore: attempts.length > 0 ? Math.round(attempts.reduce((acc, a) => acc + (a.score?.totalMarks || 0), 0) / attempts.length) : 0
+        };
+
+        res.json({ test, attempts: results, summary });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

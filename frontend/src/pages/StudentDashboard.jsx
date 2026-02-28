@@ -315,8 +315,9 @@ function MarksView() {
                 {marks.map(t => (
                     <button
                         key={t.testId}
-                        onClick={() => setSelectedTestId(t.testId)}
-                        className="w-full text-left bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:border-[#27548A]/30 transition-all group cursor-pointer"
+                        onClick={() => t.resultsPublished !== false && setSelectedTestId(t.testId)}
+                        disabled={t.resultsPublished === false}
+                        className={`w-full text-left bg-white rounded-2xl border border-gray-100 p-5 ${t.resultsPublished === false ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md hover:border-[#27548A]/30 transition-all group cursor-pointer'}`}
                     >
                         <div className="flex items-center justify-between mb-3 border-b border-gray-50 pb-3">
                             <div>
@@ -328,19 +329,27 @@ function MarksView() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="flex flex-col items-end gap-1">
-                                    <span className={`text-xl font-bold ${t.percentage >= 70 ? 'text-green-600' : t.percentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{t.percentage}%</span>
-                                    {t.rank && <span className="text-[10px] text-gray-400 font-medium">Rank #{t.rank} of {t.totalStudents}</span>}
+                                    {t.resultsPublished === false ? (
+                                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-100 uppercase tracking-wider">Results Pending</span>
+                                    ) : (
+                                        <>
+                                            <span className={`text-xl font-bold ${t.percentage >= 70 ? 'text-green-600' : t.percentage >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{t.percentage}%</span>
+                                            {t.rank && <span className="text-[10px] text-gray-400 font-medium">Rank #{t.rank} of {t.totalStudents}</span>}
+                                        </>
+                                    )}
                                 </div>
-                                <FiChevronRight size={16} className="text-gray-300 group-hover:text-[#27548A] transition-colors" />
+                                {t.resultsPublished !== false && <FiChevronRight size={16} className="text-gray-300 group-hover:text-[#27548A] transition-colors" />}
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {t.subjects?.map(s => (
-                                <span key={s.subject} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-gray-600 font-medium shadow-sm">
-                                    {s.subject}: <span className="font-bold text-gray-800">{s.marksObtained}</span>/{s.totalMarks}
-                                </span>
-                            ))}
-                        </div>
+                        {t.resultsPublished !== false && (
+                            <div className="flex flex-wrap gap-2">
+                                {t.subjects?.map(s => (
+                                    <span key={s.subject} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-gray-600 font-medium shadow-sm">
+                                        {s.subject}: <span className="font-bold text-gray-800">{s.marksObtained}</span>/{s.totalMarks}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </button>
                 ))}
             </div>
@@ -351,91 +360,133 @@ function MarksView() {
 function AttendanceView() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    useEffect(() => { fetchStudentAttendance().then(r => setData(r.data)).catch(() => toast.error('Failed')).finally(() => setLoading(false)); }, []);
+    const [viewDate, setViewDate] = useState(new Date());
+
+    useEffect(() => {
+        fetchStudentAttendance()
+            .then(r => setData(r.data))
+            .catch(() => toast.error('Failed to load attendance'))
+            .finally(() => setLoading(false));
+    }, []);
+
     if (loading) return <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-[#27548A] border-t-transparent rounded-full animate-spin" /></div>;
-    if (!data) return <div className="text-center py-10 text-gray-400">No attendance data</div>;
+    if (!data) return <div className="text-center py-10 text-gray-400">No attendance data found.</div>;
+
     const attendancePie = [
         { name: 'Present', value: data.present || 0 },
         { name: 'Absent', value: data.absent || 0 },
+        { name: 'Holiday', value: data.holiday || 0 },
     ];
+
+    // Calendar logic
+    const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+    const startDay = monthStart.getDay();
+    const totalDays = monthEnd.getDate();
+
+    const days = [];
+    for (let i = 0; i < startDay; i++) days.push(null);
+    for (let i = 1; i <= totalDays; i++) days.push(new Date(viewDate.getFullYear(), viewDate.getMonth(), i));
+
+    const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+    const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
 
     return (
         <div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col items-center justify-center">
-                    <h4 className="font-display font-semibold text-gray-800 text-sm mb-2">Attendance Overview</h4>
-                    <ResponsiveContainer width="100%" height={200}>
+                    <h4 className="font-display font-semibold text-gray-800 text-sm mb-2">Overall Overview</h4>
+                    <ResponsiveContainer width="100%" height={180}>
                         <PieChart>
-                            <Pie data={attendancePie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" stroke="none">
-                                <Cell fill="#27548A" />
+                            <Pie data={attendancePie} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" stroke="none">
+                                <Cell fill="#7ED6A7" />
                                 <Cell fill="#F28B82" />
+                                <Cell fill="#F7D774" />
                             </Pie>
                             <RechartsTooltip />
                             <Legend />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
-                <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col justify-center gap-4">
-                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
-                        <span className="text-gray-600 font-medium text-sm">Overall</span>
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 grid grid-cols-3 gap-3">
+                    <div className="flex flex-col items-center justify-center p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase mb-1">Total %</span>
                         <span className="text-xl font-bold text-[#27548A]">{data.percentage}%</span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
-                        <span className="text-gray-600 font-medium text-sm">Present Days</span>
+                    <div className="flex flex-col items-center justify-center p-3 bg-green-50/50 rounded-xl border border-green-100/50">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase mb-1">Present</span>
                         <span className="text-xl font-bold text-green-600">{data.present}</span>
                     </div>
-                    <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl">
-                        <span className="text-gray-600 font-medium text-sm">Absent Days</span>
+                    <div className="flex flex-col items-center justify-center p-3 bg-red-50/50 rounded-xl border border-red-100/50">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase mb-1">Absent</span>
                         <span className="text-xl font-bold text-red-500">{data.absent}</span>
+                    </div>
+                    <div className="col-span-3 py-2 px-4 bg-gray-50 rounded-xl text-center text-xs font-semibold text-gray-400">
+                        Attendance status helps in your internal assessment
                     </div>
                 </div>
             </div>
 
-            {data.records?.length > 0 && (
-                <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                    <h4 className="font-display font-semibold text-gray-800 text-sm mb-4">30-Day Calendar Map</h4>
-                    <div className="grid grid-cols-7 gap-2">
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                            <div key={day} className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{day}</div>
-                        ))}
-                        {Array.from({ length: 30 }).map((_, i) => {
-                            const date = new Date();
-                            date.setDate(date.getDate() - (29 - i));
-
-                            // Find record for this day
-                            const record = data.records.find(r => new Date(r.date).toDateString() === date.toDateString());
-                            let statusClass = 'bg-gray-50 border-gray-100/50 text-gray-400';
-                            let statusText = 'N/A';
-
-                            if (record) {
-                                if (record.status === 'Present') {
-                                    statusClass = 'bg-green-100 text-green-700 border-green-200 font-bold';
-                                    statusText = 'P';
-                                } else if (record.status === 'Absent') {
-                                    statusClass = 'bg-red-100 text-red-600 border-red-200 font-bold';
-                                    statusText = 'A';
-                                } else if (record.status === 'Holiday') {
-                                    statusClass = 'bg-yellow-50 text-yellow-600 border-yellow-200 font-bold';
-                                    statusText = 'H';
-                                }
-                            }
-
-                            return (
-                                <div key={i} title={date.toLocaleDateString('en-IN') + (record ? ` - ${record.status}` : '')}
-                                    className={`aspect-square rounded-xl flex items-center justify-center text-xs border ${statusClass} transition-all hover:scale-105 cursor-default shadow-sm`}>
-                                    {statusText}
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div className="flex items-center justify-center gap-4 mt-5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-100 border border-green-200 inline-block"></span> Present</div>
-                        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-100 border border-red-200 inline-block"></span> Absent</div>
-                        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-yellow-50 border border-yellow-200 inline-block"></span> Holiday</div>
-                        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-50 border border-gray-100 inline-block"></span> N/A</div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center justify-between mb-6">
+                    <h4 className="font-display font-semibold text-gray-800 text-sm flex items-center gap-2">
+                        <FiCalendar className="text-[#27548A]" /> Attendance Calendar
+                    </h4>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-gray-700 w-24 text-center">
+                            {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <div className="flex gap-1">
+                            <button onClick={prevMonth} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"><FiArrowLeft size={14} /></button>
+                            <button onClick={nextMonth} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"><FiChevronRight size={14} /></button>
+                        </div>
                     </div>
                 </div>
-            )}
+
+                <div className="grid grid-cols-7 gap-2">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-1">{day}</div>
+                    ))}
+                    {days.map((date, i) => {
+                        if (!date) return <div key={`empty-${i}`} className="aspect-square opacity-0"></div>;
+
+                        const record = data.records.find(r => new Date(r.date).toDateString() === date.toDateString());
+                        let statusColor = 'bg-gray-50 text-gray-300 border-gray-100';
+                        let symbol = '';
+
+                        if (record) {
+                            if (record.status === 'Present') {
+                                statusColor = 'bg-[#E6F8EF] text-[#059669] border-[#B2EBD0]';
+                                symbol = 'P';
+                            } else if (record.status === 'Absent') {
+                                statusColor = 'bg-[#FEE2E2] text-[#DC2626] border-[#FECACA]';
+                                symbol = 'A';
+                            } else if (record.status === 'Holiday') {
+                                statusColor = 'bg-[#FFFBEB] text-[#D97706] border-[#FEF3C7]';
+                                symbol = 'H';
+                            }
+                        }
+
+                        // Highlight today
+                        const isToday = date.toDateString() === new Date().toDateString();
+
+                        return (
+                            <div key={i} title={date.toLocaleDateString('en-IN') + (record ? ` - ${record.status}` : '')}
+                                className={`aspect-square rounded-xl border flex flex-col items-center justify-center transition-all relative ${statusColor} ${isToday ? 'ring-2 ring-[#27548A] ring-offset-1' : ''}`}>
+                                <span className="text-[10px] font-bold">{date.getDate()}</span>
+                                <span className="text-[8px] font-black">{symbol}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="flex items-center justify-center gap-6 mt-8 text-[9px] font-bold text-gray-400 uppercase tracking-widest border-t border-gray-50 pt-5">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-[#E6F8EF] border border-[#B2EBD0] inline-block"></span> Present</div>
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-[#FEE2E2] border border-[#FECACA] inline-block"></span> Absent</div>
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-[#FFFBEB] border border-[#FEF3C7] inline-block"></span> Holiday</div>
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-gray-50 border border-gray-100 inline-block"></span> N/A</div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -470,6 +521,12 @@ function ExamsView({ onStartTest }) {
         e.preventDefault();
         setStarting(true);
         try {
+            // Attempt to enter fullscreen immediately on user gesture
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                el.requestFullscreen({ navigationUI: 'hide' }).catch(() => { });
+            }
+
             const res = await startOnlineTest(passwordPrompt._id, { password: passwordInput });
             onStartTest(passwordPrompt._id, res.data);
         } catch (err) {
@@ -491,31 +548,54 @@ function ExamsView({ onStartTest }) {
                 <div className="text-center py-10 text-gray-400 font-sans border border-dashed rounded-2xl">No upcoming exams scheduled.</div>
             ) : (
                 <div className="grid gap-5">
-                    {/* Live CBTs */}
-                    {onlineTests.map(t => (
-                        <div key={t._id} className="bg-white rounded-[16px] border border-l-4 border-l-[#8B5CF6] border-[#E5E7EB] p-5 shadow-soft hover:shadow-md transition-shadow">
-                            <div className="flex items-start justify-between mb-2">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="text-gray-900 font-display font-semibold text-lg">{t.title}</h3>
-                                        <span className="bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">CBT</span>
+                    {onlineTests.map(t => {
+                        const now = new Date();
+                        const start = t.startTime ? new Date(t.startTime) : null;
+                        const end = t.endTime ? new Date(t.endTime) : null;
+
+                        let statusLabel = t.status === 'active' ? '● LIVE NOW' : t.status === 'completed' ? 'COMPLETED' : 'DRAFT';
+                        let isJoinable = t.status === 'active';
+
+                        if (start && now < start) {
+                            statusLabel = 'SCHEDULED';
+                            isJoinable = false;
+                        } else if (end && now > end) {
+                            statusLabel = 'TIME EXPIRED';
+                            isJoinable = false;
+                        }
+
+                        return (
+                            <div key={t._id} className={`bg-white rounded-[16px] border border-l-4 ${isJoinable ? 'border-l-[#8B5CF6]' : 'border-l-gray-300'} border-[#E5E7EB] p-5 shadow-soft hover:shadow-md transition-shadow`}>
+                                <div className="flex items-start justify-between mb-2">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-gray-900 font-display font-semibold text-lg">{t.title}</h3>
+                                            <span className="bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">CBT</span>
+                                        </div>
+                                        <p className="text-gray-400 text-[10px] mt-1 uppercase tracking-widest font-semibold">Batch: {t.batch}</p>
                                     </div>
-                                    <p className="text-gray-400 text-[10px] mt-1 uppercase tracking-widest font-semibold">Batch: {t.batch}</p>
+                                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full border ${isJoinable ? 'bg-green-50 text-green-700 border-green-200 animate-pulse' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                        {statusLabel}
+                                    </span>
                                 </div>
-                                <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full border ${t.status === 'active' ? 'bg-green-50 text-green-700 border-green-200 animate-pulse' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                                    {t.status === 'active' ? '● LIVE NOW' : t.status}
-                                </span>
+                                <div className="flex flex-col gap-1.5 mb-4 text-[11px] text-gray-500 font-medium">
+                                    <div className="flex gap-4">
+                                        <span className="flex items-center gap-1"><FiClock size={12} /> {t.durationMinutes} min</span>
+                                        <span>+{t.positiveMarks} / -{t.negativeMarks} marks</span>
+                                    </div>
+                                    {start && <div>Starts: <span className="text-[#27548A]">{start.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>}
+                                    {end && <div>Ends: <span className="text-[#27548A]">{end.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>}
+                                </div>
+                                <button
+                                    onClick={() => handleJoinClick(t)}
+                                    disabled={!isJoinable}
+                                    className="btn-primary w-full py-2.5 text-sm font-bold shadow-md disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:shadow-none disabled:cursor-not-allowed"
+                                >
+                                    {isJoinable ? 'Join Computer Based Test' : 'Test Unavailable'}
+                                </button>
                             </div>
-                            <div className="flex gap-4 text-xs mt-3 mb-4 font-medium text-gray-600 bg-gray-50 p-2 rounded-xl">
-                                <span className="flex items-center gap-1"><FiClock size={12} /> {t.durationMinutes} min</span>
-                                <span>+{t.positiveMarks} / -{t.negativeMarks} marks</span>
-                                <span>Max {t.maxAttempts} attempt{t.maxAttempts > 1 ? 's' : ''}</span>
-                            </div>
-                            <button onClick={() => handleJoinClick(t)} disabled={t.status !== 'active'} className="btn-primary w-full py-2.5 text-sm font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-                                Join Computer Based Test
-                            </button>
-                        </div>
-                    ))}
+                        );
+                    })}
 
                     {/* Offline Scheduled Tests */}
                     {offlineTests.map(t => (
@@ -608,7 +688,14 @@ export default function StudentDashboard() {
     };
 
     if (activeTestId && activeAttemptData) {
-        return <TestRunner testId={activeTestId} attemptData={activeAttemptData} onFinish={handleCBTFinish} />;
+        return (
+            <TestRunner
+                key={`test-${activeTestId}-${activeAttemptData._id}`}
+                testId={activeTestId}
+                attemptData={activeAttemptData}
+                onFinish={handleCBTFinish}
+            />
+        );
     }
 
     return (

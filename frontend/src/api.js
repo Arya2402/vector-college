@@ -118,6 +118,8 @@ export const fetchOnlineTestDetail = (id) => API.get(`/online-tests/${id}`);
 export const updateOnlineTest = (id, data) => API.put(`/online-tests/${id}`, data);
 export const deleteOnlineTest = (id) => API.delete(`/online-tests/${id}`);
 export const fetchLiveAttempts = (id) => API.get(`/online-tests/${id}/live`);
+export const fetchOnlineTestAnalysis = (id) => API.get(`/online-tests/${id}/analysis`);
+export const toggleOnlineTestResults = (id) => API.patch(`/online-tests/${id}/toggle-results`);
 
 // Student CBT APIs
 export const startOnlineTest = (id, data) => API.post(`/online-tests/${id}/start`, data);

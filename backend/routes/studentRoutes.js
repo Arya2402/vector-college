@@ -56,32 +56,34 @@ router.get('/dashboard', async (req, res) => {
         // Add CBT attempts
         attempts.forEach(a => {
             if (!a.onlineTestId) return;
-            // Only consider the best attempt or latest attempt
             const tid = a.onlineTestId._id.toString();
-
-            // Calculate max marks possible for this CBT test
             const totalMax = a.onlineTestId.questions.reduce((sum, q) => sum + (q.positiveMarks || 4), 0);
 
-            if (!testMap[tid] || a.score.totalMarks > testMap[tid].totalObtained) {
+            // Only show marks if showResults is true
+            const isVisible = a.onlineTestId.showResults;
+
+            if (!testMap[tid] || (isVisible && a.score.totalMarks > testMap[tid].totalObtained)) {
                 testMap[tid] = {
                     testId: tid,
                     testName: a.onlineTestId.title,
                     date: a.endTime || a.updatedAt || a.startTime,
-                    totalObtained: a.score.totalMarks,
+                    totalObtained: isVisible ? a.score.totalMarks : null,
                     totalMax: totalMax,
-                    type: 'cbt'
+                    type: 'cbt',
+                    resultsPublished: isVisible
                 };
             }
         });
 
         const testResults = Object.values(testMap).map(t => ({
             ...t,
-            percentage: t.totalMax > 0 ? Math.round((t.totalObtained / t.totalMax) * 1000) / 10 : 0,
+            percentage: t.totalMax > 0 && t.totalObtained !== null ? Math.round((t.totalObtained / t.totalMax) * 1000) / 10 : null,
         }));
 
-        // Overall average
-        const overallAvg = testResults.length > 0
-            ? Math.round(testResults.reduce((s, t) => s + t.percentage, 0) / testResults.length * 10) / 10
+        // Overall average (only include published tests)
+        const publishedResults = testResults.filter(t => t.totalObtained !== null);
+        const overallAvg = publishedResults.length > 0
+            ? Math.round(publishedResults.reduce((s, t) => s + t.percentage, 0) / publishedResults.length * 10) / 10
             : 0;
 
         // Latest test result
@@ -269,20 +271,22 @@ router.get('/marks', async (req, res) => {
 
             // If multiple attempts exist, only replace if score is higher
             const maxSubOverall = Object.values(subData).reduce((sum, d) => sum + d.max, 0);
+            const isVisible = a.onlineTestId.showResults;
 
-            if (!testMap[tid] || a.score.totalMarks > testMap[tid].totalObtained) {
+            if (!testMap[tid] || (isVisible && a.score.totalMarks > testMap[tid].totalObtained)) {
                 testMap[tid] = {
                     testId: tid,
                     testName: a.onlineTestId.title,
                     date: a.endTime || a.updatedAt || a.startTime,
                     batch: a.onlineTestId.batch,
                     type: 'cbt',
-                    subjects: Object.keys(subData).map(sub => ({
+                    resultsPublished: isVisible,
+                    subjects: isVisible ? Object.keys(subData).map(sub => ({
                         subject: sub,
                         marksObtained: subData[sub].total,
                         totalMarks: subData[sub].max
-                    })),
-                    totalObtained: a.score.totalMarks,
+                    })) : [],
+                    totalObtained: isVisible ? a.score.totalMarks : null,
                     totalMax: maxSubOverall,
                 };
             }
@@ -290,7 +294,7 @@ router.get('/marks', async (req, res) => {
 
         const results = Object.values(testMap).map(t => ({
             ...t,
-            percentage: t.totalMax > 0 ? Math.round((t.totalObtained / t.totalMax) * 1000) / 10 : 0,
+            percentage: t.totalMax > 0 && t.totalObtained !== null ? Math.round((t.totalObtained / t.totalMax) * 1000) / 10 : null,
         })).sort((a, b) => new Date(b.date) - new Date(a.date));
 
         // Get rank for each test
@@ -318,11 +322,13 @@ router.get('/attendance', async (req, res) => {
         const records = await Attendance.find({ studentId: req.user.userId }).sort({ date: -1 });
         const total = records.length;
         const present = records.filter(a => a.status === 'Present').length;
+        const holiday = records.filter(a => a.status === 'Holiday').length;
         res.json({
             records,
             total,
             present,
-            absent: total - present,
+            holiday,
+            absent: total - present - holiday,
             percentage: total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
         });
     } catch (err) {

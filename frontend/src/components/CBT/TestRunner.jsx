@@ -172,7 +172,11 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             document.removeEventListener('fullscreenchange', checkFullscreen);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             document.removeEventListener('click', trapClick, { capture: true });
-            if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+
+            // Only exit fullscreen if we are actually done or unmounting due to completion/violation
+            if ((submitting || isViolation) && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => { });
+            }
         };
     }, [handleFullscreenExit, submitting, isViolation, isFullscreenLocked]);
 
@@ -283,6 +287,28 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
 
     return (
         <div ref={containerRef} className="fixed inset-0 bg-[#F4F6FF] z-50 flex flex-col overflow-hidden">
+            {/* Fullscreen Overlay */}
+            {!isFullscreenActive && !submitting && !isViolation && (
+                <div className="fixed inset-0 z-[100] bg-white/80 backdrop-blur-md flex flex-center flex-col items-center justify-center p-6 text-center">
+                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6 border-4 border-amber-100 animate-pulse text-amber-600">
+                        <FiAlertTriangle size={40} />
+                    </div>
+                    <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">Fullscreen Required</h2>
+                    <p className="text-gray-600 max-w-sm mb-8 leading-relaxed font-medium">To maintain test integrity, you must remain in fullscreen mode. Please click the button below to continue your exam.</p>
+                    <button
+                        onClick={enterFullscreen}
+                        className="btn-primary px-10 py-4 text-lg font-bold shadow-xl active:scale-95 transition-transform"
+                    >
+                        Enter Fullscreen Mode
+                    </button>
+                    {fullscreenWarnings > 0 && (
+                        <p className="mt-8 text-sm font-bold text-red-500 uppercase tracking-widest bg-red-50 px-4 py-2 rounded-full border border-red-100">
+                            Warning {fullscreenWarnings} of 5
+                        </p>
+                    )}
+                </div>
+            )}
+
             <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center shrink-0 shadow-sm z-10">
                 <div>
                     <h1 className="font-display font-bold text-lg text-gray-900">{test.title}</h1>
