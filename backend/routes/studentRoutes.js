@@ -340,13 +340,123 @@ router.get('/attendance', async (req, res) => {
 router.get('/tests/:testId', async (req, res) => {
     try {
         const studentId = req.user.userId;
-        const test = await Test.findById(req.params.testId);
+        let test = await Test.findById(req.params.testId);
+        let type = 'offline';
+
+        if (!test) {
+            test = await OnlineTest.findById(req.params.testId);
+            type = 'cbt';
+        }
+
         if (!test) return res.status(404).json({ message: 'Test not found' });
 
-        // Get this student's marks for this test
+        if (type === 'cbt') {
+            // Check if results are visible
+            if (!test.showResults) {
+                return res.status(403).json({ message: 'Results for this test are not published yet.' });
+            }
+
+            // Get attempt for this student
+            // We take the highest scoring attempt if multiple exist (though usually maxAttempts is 1)
+            const attempts = await TestAttempt.find({ onlineTestId: test._id, studentId, status: { $in: ['submitted', 'auto-submitted-violation'] } }).sort({ 'score.totalMarks': -1 });
+            const myAttempt = attempts[0];
+
+            if (!myAttempt) return res.status(404).json({ message: 'No completed attempt found for this test.' });
+
+            // Build subject breakdown for CBT
+            const subjectsMap = {};
+            test.questions.forEach(q => {
+                const sub = q.subject || 'General';
+                if (!subjectsMap[sub]) {
+                    subjectsMap[sub] = {
+                        name: sub,
+                        totalMarks: 0,
+                        correctAnswers: 0,
+                        wrongAnswers: 0,
+                        unattempted: 0,
+                        marksObtained: 0,
+                        topics: [],
+                        topicBreakdown: []
+                    };
+                }
+                subjectsMap[sub].totalMarks += (q.positiveMarks || 4);
+                if (q.subtopic && !subjectsMap[sub].topics.includes(q.subtopic)) {
+                    subjectsMap[sub].topics.push(q.subtopic);
+                }
+            });
+
+            // Fill marks from attempt
+            myAttempt.answers.forEach(ans => {
+                const q = test.questions.find(qx => qx._id.toString() === ans.questionId.toString());
+                if (!q) return;
+                const sub = q.subject || 'General';
+
+                if (ans.isCorrect) {
+                    subjectsMap[sub].correctAnswers++;
+                    subjectsMap[sub].marksObtained += (q.positiveMarks || 4);
+                } else if (ans.selectedOptionIndex != null || ans.numericalAnswer != null) {
+                    subjectsMap[sub].wrongAnswers++;
+                    subjectsMap[sub].marksObtained -= (q.negativeMarks || 1);
+                } else {
+                    subjectsMap[sub].unattempted++;
+                }
+            });
+
+            // Get rankings for CBT
+            const allAttempts = await TestAttempt.find({ onlineTestId: test._id, status: { $in: ['submitted', 'auto-submitted-violation'] } });
+            const studentBestScore = {};
+            allAttempts.forEach(a => {
+                if (!studentBestScore[a.studentId] || a.score.totalMarks > studentBestScore[a.studentId]) {
+                    studentBestScore[a.studentId] = a.score.totalMarks;
+                }
+            });
+
+            const maxPossible = test.questions.reduce((sum, q) => sum + (q.positiveMarks || 4), 0);
+            const sorted = Object.entries(studentBestScore)
+                .map(([id, score]) => ({ studentId: parseInt(id), total: score, max: maxPossible }))
+                .sort((a, b) => b.total - a.total);
+
+            const profiles = await StudentProfile.find({ studentId: { $in: sorted.map(s => s.studentId) } });
+            const profileMap = {};
+            profiles.forEach(p => { profileMap[p.studentId] = p.name; });
+
+            const rankings = sorted.map((s, i) => ({
+                rank: i + 1,
+                studentId: s.studentId,
+                name: profileMap[s.studentId] || 'Unknown',
+                totalMarks: s.total,
+                maxMarks: s.max,
+                percentage: s.max > 0 ? Math.round((s.total / s.max) * 1000) / 10 : 0,
+                isMe: s.studentId === studentId,
+            }));
+
+            const myRank = rankings.find(r => r.isMe)?.rank || null;
+
+            return res.json({
+                test: {
+                    _id: test._id,
+                    testName: test.title,
+                    date: myAttempt.endTime || myAttempt.updatedAt,
+                    category: 'CBT Exam',
+                    batch: test.batch,
+                    type: 'cbt',
+                    positiveMarks: test.questions[0]?.positiveMarks || 4,
+                    negativeMarks: test.questions[0]?.negativeMarks || 1,
+                },
+                subjects: Object.values(subjectsMap),
+                myTotal: myAttempt.score.totalMarks,
+                myMax: maxPossible,
+                myPercentage: maxPossible > 0 ? Math.round((myAttempt.score.totalMarks / maxPossible) * 1000) / 10 : 0,
+                myRank,
+                totalStudents: rankings.length,
+                rankings,
+                attemptId: myAttempt._id
+            });
+        }
+
+        // Offline Logic (Existing)
         const myMarks = await Marks.find({ testId: test._id, studentId });
 
-        // Build subject breakdown with topic details
         const subjects = test.subjects.map(sub => {
             const mark = myMarks.find(m => m.subject === sub.name);
             return {
@@ -362,11 +472,9 @@ router.get('/tests/:testId', async (req, res) => {
             };
         });
 
-        // My total
         const myTotal = myMarks.reduce((s, m) => s + m.marksObtained, 0);
         const myMax = myMarks.reduce((s, m) => s + m.totalMarks, 0);
 
-        // Get ALL marks for this test to compute rankings
         const allMarks = await Marks.find({ testId: test._id });
         const studentTotals = {};
         allMarks.forEach(m => {
@@ -375,12 +483,10 @@ router.get('/tests/:testId', async (req, res) => {
             studentTotals[m.studentId].max += m.totalMarks;
         });
 
-        // Sort by total descending
         const sorted = Object.entries(studentTotals)
             .map(([id, data]) => ({ studentId: parseInt(id), total: data.total, max: data.max }))
             .sort((a, b) => b.total - a.total);
 
-        // Attach names and assign ranks
         const profiles = await StudentProfile.find({ studentId: { $in: sorted.map(s => s.studentId) } });
         const profileMap = {};
         profiles.forEach(p => { profileMap[p.studentId] = p.name; });
@@ -404,6 +510,7 @@ router.get('/tests/:testId', async (req, res) => {
                 date: test.date,
                 category: test.category,
                 batch: test.batch,
+                type: 'offline',
                 positiveMarks: test.positiveMarks,
                 negativeMarks: test.negativeMarks,
             },
