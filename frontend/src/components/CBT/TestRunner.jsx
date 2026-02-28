@@ -101,18 +101,6 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
         }
     }, []);
 
-    useEffect(() => {
-        const handleFsChange = () => {
-            const isActive = !!document.fullscreenElement;
-            setIsFullscreenActive(isActive);
-            if (!isActive && !submitting && !isViolation) {
-                handleFullscreenExit();
-            }
-        };
-        document.addEventListener('fullscreenchange', handleFsChange);
-        return () => document.removeEventListener('fullscreenchange', handleFsChange);
-    }, [handleFullscreenExit, submitting, isViolation]);
-
     const handleFullscreenExit = useCallback(async () => {
         if (submitting || isViolation) return;
 
@@ -138,6 +126,18 @@ export default function TestRunner({ testId, attemptData, onFinish }) {
             }, 500);
         }
     }, [fullscreenWarnings, attemptData._id, submitting, isViolation, handleSubmit]);
+
+    useEffect(() => {
+        const handleFsChange = () => {
+            const isActive = !!document.fullscreenElement;
+            setIsFullscreenActive(isActive);
+            if (!isActive && !submitting && !isViolation) {
+                handleFullscreenExit();
+            }
+        };
+        document.addEventListener('fullscreenchange', handleFsChange);
+        return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    }, [handleFullscreenExit, submitting, isViolation]);
 
     useEffect(() => {
         // Initial Fullscreen Request
