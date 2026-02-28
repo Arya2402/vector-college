@@ -6,6 +6,7 @@ const streamifier = require('streamifier');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const OnlineTest = require('../models/OnlineTest');
 const TestAttempt = require('../models/TestAttempt');
+const StudentProfile = require('../models/StudentProfile');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -243,13 +244,13 @@ router.post('/attempt/:attemptId/submit', protect, authorize('student'), async (
                     if (Number(studentAns.numericalAnswer) === Number(q.correctNumericalAnswer)) {
                         isCorrect = true;
                     }
-                    formattedAnswers.push({ questionId: q._id, numericalAnswer: studentAns.numericalAnswer });
+                    formattedAnswers.push({ questionId: q._id, numericalAnswer: studentAns.numericalAnswer, isCorrect });
                 } else {
                     // Default MCQ
                     if (parseInt(studentAns.selectedOptionIndex) === q.correctOptionIndex) {
                         isCorrect = true;
                     }
-                    formattedAnswers.push({ questionId: q._id, selectedOptionIndex: parseInt(studentAns.selectedOptionIndex) });
+                    formattedAnswers.push({ questionId: q._id, selectedOptionIndex: parseInt(studentAns.selectedOptionIndex), isCorrect });
                 }
 
                 if (isCorrect) {

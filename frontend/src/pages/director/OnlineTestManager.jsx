@@ -290,13 +290,13 @@ function AnalysisView({ testId, onBack }) {
                                             {isCorrect ? <span className="text-green-600 flex items-center gap-1"><FiCheck /> Correct</span> : isSkipped ? <span className="text-gray-400 flex items-center gap-1"><FiAlertCircle /> Unattempted</span> : <span className="text-red-600 flex items-center gap-1"><FiX /> Wrong</span>}
                                         </div>
                                         <div className="text-gray-900 font-medium leading-relaxed">
-                                            <MathRenderer text={q.questionText} />
+                                            <MathRenderer content={q.text} />
                                         </div>
                                     </div>
                                     {q.imageUrl && <img src={q.imageUrl} alt="Question" className="w-24 h-24 object-contain rounded-lg bg-white p-1 border border-gray-100" />}
                                 </div>
 
-                                {q.type === 'mcq' && (
+                                {q.type === 'MCQ' && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                         {q.options.map((opt, oIdx) => {
                                             const isSelected = studentAns?.selectedOptionIndex === oIdx;
@@ -311,7 +311,7 @@ function AnalysisView({ testId, onBack }) {
                                                 <div key={oIdx} className={`p-2.5 rounded-xl border text-[11px] font-medium transition-all ${optStyle}`}>
                                                     <div className="flex items-center gap-2">
                                                         <span className="w-5 h-5 rounded-full bg-black/5 flex items-center justify-center shrink-0 uppercase">{String.fromCharCode(65 + oIdx)}</span>
-                                                        <MathRenderer text={opt} />
+                                                        <MathRenderer content={opt} />
                                                     </div>
                                                 </div>
                                             );
@@ -319,7 +319,7 @@ function AnalysisView({ testId, onBack }) {
                                     </div>
                                 )}
 
-                                {q.type === 'numerical' && (
+                                {q.type === 'Numerical' && (
                                     <div className="flex gap-4">
                                         <div className="flex-1 p-3 rounded-xl bg-white border border-gray-100">
                                             <div className="text-[9px] uppercase font-bold text-gray-400 mb-0.5">Student Answer</div>
@@ -327,7 +327,7 @@ function AnalysisView({ testId, onBack }) {
                                         </div>
                                         <div className="flex-1 p-3 rounded-xl bg-green-50 border border-green-200">
                                             <div className="text-[9px] uppercase font-bold text-green-600/60 mb-0.5">Correct Answer</div>
-                                            <div className="font-mono font-bold text-green-700">{q.correctNumericalValue} (±{q.numericalTolerance || 0})</div>
+                                            <div className="font-mono font-bold text-green-700">{q.correctNumericalAnswer}</div>
                                         </div>
                                     </div>
                                 )}

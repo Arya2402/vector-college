@@ -4,6 +4,7 @@ const answerSchema = new mongoose.Schema({
     questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
     selectedOptionIndex: { type: Number }, // For MCQ
     numericalAnswer: { type: Number }, // For Numerical
+    isCorrect: { type: Boolean, default: false },
     status: { type: String, enum: ['unvisited', 'visited', 'answered', 'reviewed'], default: 'unvisited' }
 }, { _id: false });
 
